@@ -1,0 +1,8 @@
+class sampleclass [
+    fields x, y, z
+    method m(a, b, c) with locals q, r, s:
+        s = 1
+
+    method m2(d, e) with locals f, g:
+        f = (d + 1)
+]

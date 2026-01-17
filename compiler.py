@@ -2,6 +2,7 @@
 
 import argparse
 import sys
+import os
 
 class TokenType:
 	#Fixed punctuation
@@ -34,18 +35,25 @@ class TokenType:
 	METHOD = 26,
 	LOCALS = 27,
 	CLASS = 28,
+	MAIN = 29,
 	#Tokens with data
-	OPERATOR = 29,
-	NUMBER = 30,
-	IDENTIFIER = 31
+	OPERATOR = 30,
+	NUMBER = 31,
+	IDENTIFIER = 32
 
 TOKEN_TYPE_TO_STDOUT = {
 	1: "(", 2: ")", 3: "{", 4: "}", 5: "^", 6: "&", 7: "@", 8: "!",
 	9: ".", 10: ":", 11: ",", 12: "_", 13: "=", 14: "[", 15: "]", 16: "this", 
  	17: "if", 18: "else", 19: "ifonly", 20: "while", 21: "return", 22: "print", 
 	23: "EOF", 24: "with", 25: "fields", 26: "method", 27: "locals", 28: "class",
- 	29: "Operator", 30: "Number", 31: "Identifier"
+ 	29: "main", 30: "Operator", 31: "Number", 32: "Identifier"
 }
+
+def printToken(token):
+	if type(token) == tuple:
+		print("Token: ", TOKEN_TYPE_TO_STDOUT[token[0]])
+	else:
+		print(token)
 
 class Operator:
     def __init__(self, op: str):
@@ -87,7 +95,9 @@ class Tokenizer:
 					'.': TokenType.DOT,
 					',': TokenType.COMMA,
 					'_': TokenType.UNDERSCORE,
-     				'=': TokenType.EQUALS}
+     				'=': TokenType.EQUALS,
+					'[': TokenType.LEFT_BRACKET,
+					']': TokenType.RIGHT_BRACKET}
  
 	KEYWORD_MAP = {'if': TokenType.IF,
 					'else': TokenType.ELSE,
@@ -95,9 +105,15 @@ class Tokenizer:
                  	'while': TokenType.WHILE,
                   	'return': TokenType.RETURN,
                    	'print': TokenType.PRINT,
-                    'this': TokenType.THIS}
+                    'this': TokenType.THIS,
+					'with': TokenType.WITH,
+					'fields': TokenType.FIELDS,
+					'method': TokenType.METHOD,
+					'locals': TokenType.LOCALS,
+					'class': TokenType.CLASS,
+					'main': TokenType.MAIN}
  
-	OP_LIST = ['+', '-', '*', '/']
+	OP_LIST = ['+', '-', '*', '/', '<', '>']
 
 	def __init__(self, text: str):
 		self._text = text
@@ -130,8 +146,9 @@ class Tokenizer:
 			return tmp
 
 		if(self._text[self._current] in Tokenizer.OP_LIST):
+			new_op = Operator(self._text[self._current])
 			self._current += 1
-			return Operator(self._text[self._current])
+			return new_op
 
 		if(self._text[self._current].isdigit()):
 			#Number
@@ -144,7 +161,7 @@ class Tokenizer:
 		elif self._text[self._current].isalpha():
 			start = self._current
 			self._current += 1 #Might be useless
-			while(self._current < len(self._text) and self._text[self._current].isalpha()):
+			while(self._current < len(self._text) and (self._text[self._current].isalpha() or self._text[self._current].isdigit())):
 				self._current += 1
     
 			fragment = self._text[start: self._current]
@@ -165,9 +182,12 @@ class Statement:
         pass
     
 class Constant(Expression):
-    def __init__(self, value: int):
-        super().__init__()
-        self._value = value
+	def __init__(self, value: int):
+		super().__init__()
+		self._value = value
+
+	def __str__(self) -> str:
+		return f"[Constant: value={self._value}]"
 
 class Variable(Expression):
 	def __init__(self, name: str):
@@ -176,27 +196,43 @@ class Variable(Expression):
 
 	def __str__(self) -> str:
 		super().__init__()
-		return f"Variable: name={self._name}"
+		return f"[Variable: name={self._name}]"
 
 class BinaryOp(Expression):
-    def __init__(self, lhs, op, rhs):
-        super().__init__()
-        self._lhs = lhs
-        self._op = op
-        self._rhs = rhs
+	def __init__(self, lhs, op, rhs):
+		super().__init__()
+		self._lhs = lhs
+		self._op = op
+		self._rhs = rhs
 
-class FieldName:
-    def __init__(self, base, field_name):
-        super().__init__()
-        self._base = base
-        self._field_name = field_name
+	def __str__(self) -> str:
+		return f"Binary Op: [LHS ={self._lhs}, op={self._op}, RHS={self._rhs}]"
+
+class FieldRead(Expression):
+	def __init__(self, base: str, field_name: str):
+		super().__init__()
+		self._base = base
+		self._field_name = field_name
+
+	def __str__(self) -> str:
+		return f"Field Read: [base={self._base}, field name={self._field_name}]"
 
 class MethodCall(Expression):
-    def __init__(self, base, methodname, args):
-        super().__init__()
-        self._base = base
-        self._methodname = methodname
-        self._args = args
+	def __init__(self, base, methodname, args):
+		super().__init__()
+		self._base = base
+		self._methodname = methodname
+		self._args = args
+
+	def __str__(self) -> str:
+		args_str = ", ".join(str(arg) for arg in self._args)
+		return (
+			f"MethodCall("
+			f"base={self._base}, "
+			f"method={self._methodname}, "
+			f"args=[{args_str}]"
+			f")"
+		)
 
 class ClassRef(Expression):
 	def __init__(self, name):
@@ -206,12 +242,12 @@ class ClassRef(Expression):
 	def __str__(self) -> str:
 		return f"Class Reference: name={self._name}"
 
-class ThisExpr:
+class ThisExpr(Expression):
     def __init__(self):
         pass
     
     def __str__(self) -> str:
-        return "this"
+        return "This Expression"
 
 class Assignment(Statement):
     def __init__(self, variable: Variable, expression: Expression):
@@ -220,16 +256,16 @@ class Assignment(Statement):
         self._expression = expression
         
     def __str__(self) -> str:
-        return f"Assign {self._variable} = {self._expression}"
+        return f"Assignment: [variable={self._variable} expression={self._expression}]"
 
 class FieldUpdate(Statement):
-    def __init__(self, field_read: FieldName, expression: Expression):
+    def __init__(self, field_read: FieldRead, expression: Expression):
         super().__init__()
         self._field_read = field_read
         self._expression = expression
         
     def __str__(self) -> str:
-        return f"Field Assignment: {self._field_read} = {self._expression}"
+        return f"Field Update: [field read={self._field_read} expression={self._expression}]"
 
 class IfStatement(Statement):
 	def __init__(self, condition: Expression, true_statements: list[Statement], else_statements: list[Statement]):
@@ -239,28 +275,39 @@ class IfStatement(Statement):
 		self._else_statements = else_statements
 	
 	def __str__(self) -> str:
-		return f"If statement: Condition = {self._condition}, \
-      	if_block: {"\n".join(self._true_statements)}, \
-           else_block: {"\n".join(self._else_statements)}"
+		if_block_statements = "\n".join(str(statement) for statement in self._true_statements)
+		else_block_statements = "\n".join(str(statement) for statement in self._else_statements)
+		return (
+			f"If statement: [Condition = {self._condition},"
+			f"if_block: {if_block_statements},"
+           	f"else_block: {else_block_statements}]"
+		)
 
 class IfOnlyStatement(Statement):
-    def __init__(self, condition: Expression, statements: list[Statement]):
-        super().__init__()
-        self._condition = condition
-        self._statements = statements
+	def __init__(self, condition: Expression, statements: list[Statement]):
+		super().__init__()
+		self._condition = condition
+		self._statements = statements
         
-    def __str__(self) -> str:
-        return f"IfOnly Statement: Condition = {self._condition}, \
-            statements: {"\n".join(self._statements)}"
+	def __str__(self) -> str:
+		if_block_statements = "\n".join(str(statement) for statement in self._statements)
+		return (
+			f"IfOnly Statement: [Condition = {self._condition}"
+			f"Statements: {if_block_statements}]"
+		)
 
 class WhileStatement(Statement):
-    def __init__(self, condition: Expression, statements: list[Statement]):
-        super().__init__()
-        self._condition = condition
-        self._statements = statements
-        
-    def __str__(self) -> str:
-        return f"While statement: Condition = {self._condition}, Statements: {"\n".join(self._statements)}"
+	def __init__(self, condition: Expression, statements: list[Statement]):
+		super().__init__()
+		self._condition = condition
+		self._statements = statements
+
+	def __str__(self) -> str:
+		while_block_statements = "\n".join(str(statement) for statement in self._statements)
+		return (
+			f"While Statement: [Condition = {self._condition}"
+			f"Statements: {while_block_statements}]"
+		)
 
 class ReturnStatement(Statement):
     def __init__(self, exp: Expression):
@@ -268,7 +315,7 @@ class ReturnStatement(Statement):
         self._exp = exp
         
     def __str__(self) -> str:
-        return f"Return statement: returns {self._exp}"
+        return f"Return statement: [returns {self._exp}]"
 
 class PrintStatement(Statement):
     def __init__(self, exp):
@@ -276,14 +323,14 @@ class PrintStatement(Statement):
         self._exp = exp
         
     def __str__(self) -> str:
-        return f"Print statement: prints {self._exp}"
+        return f"Print statement: [prints {self._exp}]"
 
 class Argument:
     def __init__(self, name: str):
         self._name = name
         
     def __str__(self) -> str:
-        return f"Argument: name={self._name}"
+        return f"Argument: [name={self._name}]"
     
 class MethodDefinintion:
 	def __init__(self, args: list[Argument], locals: list[Variable], statements: list[Statement]):
@@ -292,18 +339,50 @@ class MethodDefinintion:
 		self._statements = statements
         
 	def __str__(self) -> str:
-		return f"Arguments: {"\n".join(self._args)} \
-      Local Variables: {"\n".join(self._locals)} \
-      Statements: {"\n".join(self._statements)}"
+		arguments = " ".join(str(arg) for arg in self._args)
+		local_vars = " ".join(str(local) for local in self._locals)
+		statements = "\n".join(str(statement) for statement in self._statements)
+		return (
+				f"Method Definition: [Arguments={arguments}, "
+      			f"Local Variables={local_vars}, "
+      			f"Statements={statements}]"
+		)
 
 class ClassDefinition:
-	def __init__(self, fields: list[Variable], methods: list[MethodDefinintion]):
+	def __init__(self, name: str, fields: list[Variable], methods: list[MethodDefinintion]):
+		self._name = name
 		self._fields = fields
 		self._methods = methods
     
 	def __str__(self) -> str:
-		return f"Fields: {", ".join(self._fields)}, Methods:, {"\n".join(self._methods)}"
-    
+		fields = " ".join(str(field) for field in self._fields)
+		methods = "\n".join(str(method) for method in self._methods)
+		return f"Class Definition: [name={self._name}, Fields={fields}, Methods={methods}"
+
+class MainMethod:
+	def __init__(self, vars: list[Variable], statements: list[Statement]):
+		self._vars = vars
+		self._statements = statements
+
+	def __str__(self) -> str:
+		var_str = " ".join(str(var) for var in self._vars)
+		statements = " ".join(str(statement) for statement in self._statements)
+		return f"Main Method: [variables={var_str}, statements={statements}"
+
+class ASTNode:
+	def __init__(self, exp: Expression, statement: Statement, class_def: ClassDefinition, main_method: MainMethod):
+		self._exp = exp
+		self._statement = statement
+		self._class_def = class_def
+		self._main_def = main_method
+
+	def __str__(self) -> str:
+		exp_str = f"{str(self._exp)}" if self._exp else ""
+		statement_str = f"{str(self._statement)}" if self._statement else ""
+		class_str = f"{str(self._class_def)}" if self._class_def else ""
+		main_str = f"{str(self._class_def)}" if self._main_def else ""
+		return f"AST Node: {exp_str}, {statement_str} {class_str} {main_str}"
+
 class Parser:
 	def __init__(self, tokenizer: Tokenizer):
 		self._tokenizer = tokenizer
@@ -335,7 +414,7 @@ class Parser:
 			fname = self._tokenizer.next()
 			if type(fname) != Identifier:
 				raise Exception("Expected valid field name but found", fname)
-			return FieldName(base, fname)
+			return FieldRead(base, fname)
 		elif tok == TokenType.CARET:
 			mbase = self.parseExpr()
 			mdot = self._tokenizer.next()
@@ -345,7 +424,7 @@ class Parser:
 			if type(mname) != Identifier:
 				raise Exception("Expected valid method name but found", mname)
 			open = self._tokenizer.next()
-			if type(open) != TokenType.LEFT_PAREN:
+			if open != TokenType.LEFT_PAREN:
 				raise Exception("Expected '(' but found", open)
 			args = []
 			while(self._tokenizer.peek() != TokenType.RIGHT_PAREN):
@@ -354,6 +433,8 @@ class Parser:
 				punc = self._tokenizer.peek()
 				if(punc == TokenType.COMMA):
 					self._tokenizer.next()
+			
+			self._tokenizer.next() #Eat right paren
 			return MethodCall(mbase, mname, args)
 		elif tok == TokenType.ATSIGN:
 			cname = self._tokenizer.next()
@@ -383,14 +464,25 @@ class Parser:
 				raise Exception("Expected '=' but got:", eq)
 			return self.parseExpr()
 		elif tok == TokenType.NOT:
-			field_name = self.parseExpr()
-			if type(field_name) != FieldName:
-				raise Exception("Expected field read, got:", field_name)
+			#TODO: Ask about !a.b.c = d
+			fbase = self._tokenizer.next()
+			if type(fbase) != Identifier:
+				raise Exception("Expected identifier, got:", fbase)
+			
+			dot = self._tokenizer.next()
+			if dot != TokenType.DOT:
+				raise Exception("Expected '.', got:", dot)
+			
+			fname = self._tokenizer.next()
+			if type(fname) != Identifier:
+				raise Exception("Expected identifier, got:", fname)
+			
+			fread = FieldRead(fbase.name(), fname.name())
 			eq = self._tokenizer.next()
 			if eq != TokenType.EQUALS:
 				raise Exception("Expected '=' but got:", eq)
 			exp = self.parseExpr()
-			return FieldUpdate(field_name, exp)
+			return FieldUpdate(fread, exp)
 		elif tok == TokenType.IF:
 			exp = self.parseExpr()
 			colon = self._tokenizer.next()
@@ -403,7 +495,7 @@ class Parser:
 
 			if_statements = []
 			while(self._tokenizer.peek() != TokenType.RIGHT_BRACE):
-				if_statements.append(self.parseStatement)
+				if_statements.append(self.parseStatement())
 
 			_ = self._tokenizer.next() #Move past right brace
 			else_tok = self._tokenizer.next()
@@ -479,31 +571,34 @@ class Parser:
 		if tok != TokenType.CLASS:
 			raise Exception("Expected class definition, got:", tok) # Should not trigger
 
+		cname = self._tokenizer.next()
+		if type(cname) != Identifier:
+			raise Exception("Expected identifier, got:", cname)
+		
 		left_bracket = self._tokenizer.next()
 		if left_bracket != TokenType.LEFT_BRACKET:
 			raise Exception("Expected '[' but got:", left_bracket)
 
 		fields = []
-		methods = []
 		tok = self._tokenizer.next()
-		if type(tok) != TokenType.FIELDS or type(tok) != TokenType.METHOD:
+		if tok != TokenType.FIELDS:
 			raise Exception("Unknown Identifier", tok)
 
-		if tok == TokenType.FIELDS:
+		field_token = self._tokenizer.next()
+		if type(field_token) != Identifier:
+			raise Exception("Expected identifier, got:", field_token)
+
+		fields.append(Variable(field_token.name()))
+		while(self._tokenizer.peek() == TokenType.COMMA):
+			_ = self._tokenizer.next() #Advance past comma
 			field_token = self._tokenizer.next()
-			if field_token != Identifier:
+			if type(field_token) != Identifier:
 				raise Exception("Expected identifier, got:", field_token)
 
 			fields.append(Variable(field_token.name()))
-			while(self._tokenizer.peek() == TokenType.COMMA):
-				_ = self._tokenizer.next() #Advance past comma
-				field_token = self._tokenizer.next()
-				if field_token != Identifier:
-					raise Exception("Expected identifier, got:", field_token)
+		tok = self._tokenizer.next()
 
-				fields.append(Variable(field_token.name()))
-			tok = self._tokenizer.next()
-	
+		methods = []
 		while tok == TokenType.METHOD:
 			mname = self._tokenizer.next()
 			if type(mname) != Identifier:
@@ -527,10 +622,10 @@ class Parser:
 				if type(arg_tok) != Identifier:
 					raise Exception("Expected identifier, got:", arg_tok)
 				margs.append(Argument(arg_tok.name()))
-
-			if len(margs) > 6:
-				raise Exception("Maximum 6 arguments for a method")
-    
+			
+			right_paren = self._tokenizer.next()
+			if right_paren != TokenType.RIGHT_PAREN:
+				raise Exception("Expected ')' but got:", right_paren)
 			
 			if self._tokenizer.peek() == TokenType.WITH:
 				_ = self._tokenizer.next()
@@ -550,44 +645,91 @@ class Parser:
 						raise Exception("Expected identifier, got:", local_tok)
 					mlocals.append(Variable(local_tok.name()))
 
-			colon = self._tokenizer.next()
-			if colon != TokenType.COLON:
-				raise Exception("Expected colon, got:", colon)
+				colon = self._tokenizer.next()
+				if colon != TokenType.COLON:
+					raise Exception("Expected colon, got:", colon)
 
-			while self._tokenizer.peek() != TokenType.METHOD or self._tokenizer.peek() != TokenType.RIGHT_BRACKET:
-				statements.append(self.parseStatement())
-    
-			if not statements:
-				raise Exception("Expected method body")
+				while self._tokenizer.peek() != TokenType.METHOD and self._tokenizer.peek() != TokenType.RIGHT_BRACKET:
+					statements.append(self.parseStatement())
+		
+				if not statements:
+					raise Exception("Expected method body")
 
-			methods.append(MethodDefinintion(margs, mlocals, statements))
-			tok = self._tokenizer.next()
+				methods.append(MethodDefinintion(margs, mlocals, statements))
+				tok = self._tokenizer.next()
    
 		if tok != TokenType.RIGHT_BRACKET:
 			raise Exception("Expected ']', but got:", tok)
 
-		return ClassDefinition(fields, methods)			
+		return ClassDefinition(cname, fields, methods)			
+	
+	def parseMain(self):
+		main_tok = self._tokenizer.next()
+		if main_tok != TokenType.MAIN:
+			raise Exception("Expected main method, got:", main_tok)
+		
+		with_tok = self._tokenizer.next()
+		if with_tok != TokenType.WITH:
+			raise Exception ("Expected with, got:", with_tok)
+		
+		locals = []
+		local_tok = self._tokenizer.next()
+		if type(local_tok) != Identifier:
+			raise Exception("Expected identifier, got:", local_tok)
+		
+		locals.append(local_tok)
+		while(self._tokenizer.peek() == TokenType.COMMA):
+			_ = self._tokenizer.next()
+			local_tok = self._tokenizer.next()
+			if type(local_tok) != Identifier:
+				raise Exception("Expected identifier, got:", local_tok)
+			
+			locals.append(local_tok)
+		
+		colon = self._tokenizer.next()
+		if colon != TokenType.COLON:
+			raise Exception("Expected ':', but got:", colon)
+		
+		statements = []
+		while self._tokenizer.peek() != TokenType.EOF:
+			statements.append(self.parseStatement())
+
+		return MainMethod(locals, statements)
 			
 if __name__ == "__main__":
 	if len(sys.argv) < 2:
-		print("Usage: comp {tokenize|parseExpr} [args...]")
+		print("Usage: comp {tokenize|parseExpr|parseStatement|parseClass} file")
 		sys.exit(1)
   
-	str_text = " ".join(sys.argv[2:])
-	print(str_text)
+	str_text = ""
+	if not os.path.exists(sys.argv[2]):
+		raise Exception(f"Error, file: {sys.argv[2]} does not exist")
+	
+	with open(sys.argv[2], 'r') as f:
+		str_text = "".join(f.readlines())
+	
 	if sys.argv[1] == "tokenize":
 		tokenizer = Tokenizer(str_text)
 		token = None
 		while(tokenizer.peek() != TokenType.EOF):
 			token = tokenizer.next()
-			if(type(token) == Operator or type(token) == Number or type(token) == Identifier):
-				print(token)
-			else:
-				print("Token is:", TOKEN_TYPE_TO_STDOUT[token[0]])
+			printToken(token)
     
 	elif sys.argv[1] == "parseExpr":
 		parser = Parser(Tokenizer(str_text))
 		print(parser.parseExpr())
+	elif sys.argv[1] == "parseStatement":
+		parser = Parser(Tokenizer(str_text))
+		print(parser.parseStatement())
+	elif sys.argv[1] == "parseClass":
+		parser = Parser(Tokenizer(str_text))
+		print(parser.parseClass())
+	elif sys.argv[1] == "parseMain":
+		parser = Parser(Tokenizer(str_text))
+		print(parser.parseMain())
+	elif sys.argv[1] == "parseFile":
+		parser = Parser(Tokenizer(str_text))
+
 	else:
 		raise Exception("Invalid usage")
   
