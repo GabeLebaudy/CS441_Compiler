@@ -387,6 +387,21 @@ class Parser:
 	def __init__(self, tokenizer: Tokenizer):
 		self._tokenizer = tokenizer
 	
+	def getCommaSepIdentifiers(self) -> list[Identifier]:
+		identifiers = []
+		if type(self._tokenizer.peek()) != Identifier:
+			return identifiers
+		
+		tok = self._tokenizer.next()
+		identifiers.append(tok)
+		while self._tokenizer.peek() == TokenType.COMMA:
+			_ = self._tokenizer.next()
+			tok = self._tokenizer.next()
+			if type(tok) != Identifier:
+				raise Exception("Expected identifier, got:", tok)
+			identifiers.append(tok)
+		return identifiers
+
 	def parseExpr(self) -> Expression:
 		tok = self._tokenizer.next()
 		if tok == TokenType.EOF:
@@ -566,7 +581,7 @@ class Parser:
 		else:
 			raise Exception("Unexpected token for start of statement:", tok)
     
-	def parseClass(self):
+	def parseClass(self) -> ClassDefinition:
 		tok = self._tokenizer.next()
 		if tok != TokenType.CLASS:
 			raise Exception("Expected class definition, got:", tok) # Should not trigger
@@ -579,26 +594,15 @@ class Parser:
 		if left_bracket != TokenType.LEFT_BRACKET:
 			raise Exception("Expected '[' but got:", left_bracket)
 
-		fields = []
 		tok = self._tokenizer.next()
 		if tok != TokenType.FIELDS:
-			raise Exception("Unknown Identifier", tok)
+			raise Exception("Expected fields, got:", tok)
 
-		field_token = self._tokenizer.next()
-		if type(field_token) != Identifier:
-			raise Exception("Expected identifier, got:", field_token)
-
-		fields.append(Variable(field_token.name()))
-		while(self._tokenizer.peek() == TokenType.COMMA):
-			_ = self._tokenizer.next() #Advance past comma
-			field_token = self._tokenizer.next()
-			if type(field_token) != Identifier:
-				raise Exception("Expected identifier, got:", field_token)
-
-			fields.append(Variable(field_token.name()))
-		tok = self._tokenizer.next()
+		field_ids = self.getCommaSepIdentifiers()
+		fields = (Variable(i.name()) for i in field_ids)
 
 		methods = []
+		tok = self._tokenizer.next()
 		while tok == TokenType.METHOD:
 			mname = self._tokenizer.next()
 			if type(mname) != Identifier:
@@ -608,62 +612,50 @@ class Parser:
 			if left_paren != TokenType.LEFT_PAREN:
 				raise Exception("Expected '(' got:", left_paren)
 
-			margs = []
-			mlocals = []
 			statements = []
-			arg_tok = self._tokenizer.next()
-			if type(arg_tok) != Identifier:
-				raise Exception("Expected identifier, got:", arg_tok)
-    
-			margs.append(arg_tok)
+			method_identifiers = self.getCommaSepIdentifiers()
+			margs = (Argument(i.name()) for i in method_identifiers)
+			
+			tok = self._tokenizer.next()
+			if tok != TokenType.RIGHT_PAREN:
+				raise Exception("Expected ')' but got:", tok)
+			
+			tok = self._tokenizer.next()
+			if tok != TokenType.WITH:
+				raise Exception("Expected with, got:", tok)
+			
+			tok = self._tokenizer.next()
+			if tok != TokenType.LOCALS:
+				raise Exception("Expected locals, got:", tok)
+
+			local_identifiers = self.getCommaSepIdentifiers()
+			mlocals = (Variable(i.name()) for i in local_identifiers)
 			while(self._tokenizer.peek() == TokenType.COMMA):
 				_ = self._tokenizer.next()
-				arg_tok = self._tokenizer.next()
-				if type(arg_tok) != Identifier:
-					raise Exception("Expected identifier, got:", arg_tok)
-				margs.append(Argument(arg_tok.name()))
-			
-			right_paren = self._tokenizer.next()
-			if right_paren != TokenType.RIGHT_PAREN:
-				raise Exception("Expected ')' but got:", right_paren)
-			
-			if self._tokenizer.peek() == TokenType.WITH:
-				_ = self._tokenizer.next()
-				tok = self._tokenizer.next()
-				if tok != TokenType.LOCALS:
-					raise Exception("Expected locals, got:", tok)
-
 				local_tok = self._tokenizer.next()
 				if type(local_tok) != Identifier:
 					raise Exception("Expected identifier, got:", local_tok)
 				mlocals.append(Variable(local_tok.name()))
-    
-				while(self._tokenizer.peek() == TokenType.COMMA):
-					_ = self._tokenizer.next()
-					local_tok = self._tokenizer.next()
-					if type(local_tok) != Identifier:
-						raise Exception("Expected identifier, got:", local_tok)
-					mlocals.append(Variable(local_tok.name()))
 
-				colon = self._tokenizer.next()
-				if colon != TokenType.COLON:
-					raise Exception("Expected colon, got:", colon)
+			colon = self._tokenizer.next()
+			if colon != TokenType.COLON:
+				raise Exception("Expected colon, got:", colon)
 
-				while self._tokenizer.peek() != TokenType.METHOD and self._tokenizer.peek() != TokenType.RIGHT_BRACKET:
-					statements.append(self.parseStatement())
-		
-				if not statements:
-					raise Exception("Expected method body")
+			while self._tokenizer.peek() != TokenType.METHOD and self._tokenizer.peek() != TokenType.RIGHT_BRACKET:
+				statements.append(self.parseStatement())
+	
+			if not statements:
+				raise Exception("Expected method body")
 
-				methods.append(MethodDefinintion(margs, mlocals, statements))
-				tok = self._tokenizer.next()
+			methods.append(MethodDefinintion(margs, mlocals, statements))
+			tok = self._tokenizer.next()
    
 		if tok != TokenType.RIGHT_BRACKET:
 			raise Exception("Expected ']', but got:", tok)
 
 		return ClassDefinition(cname, fields, methods)			
 	
-	def parseMain(self):
+	def parseMain(self) -> MainMethod:
 		main_tok = self._tokenizer.next()
 		if main_tok != TokenType.MAIN:
 			raise Exception("Expected main method, got:", main_tok)
@@ -695,10 +687,26 @@ class Parser:
 			statements.append(self.parseStatement())
 
 		return MainMethod(locals, statements)
+	
+	def parseFile(self) -> list[ASTNode]:
+		nodes = []
+		while(self._tokenizer.peek() != TokenType.EOF):
+			open_token = self._tokenizer.peek()
+			if open_token == TokenType.CLASS:
+				print("Parsing Class!")
+				class_def = self.parseClass()
+				nodes.append(ASTNode(None, None, class_def, None))
+			elif open_token == TokenType.MAIN:
+				print("Parsing main")
+				main_def = self.parseMain()
+				nodes.append(ASTNode(None, None, None, main_def))
+			else:
+				raise Exception("Unknown starting token:", open_token)
+		return nodes
 			
 if __name__ == "__main__":
-	if len(sys.argv) < 2:
-		print("Usage: comp {tokenize|parseExpr|parseStatement|parseClass} file")
+	if len(sys.argv) < 3:
+		print("Usage: comp {tokenize|parseExpr|parseStatement|parseClass|parseFile} file")
 		sys.exit(1)
   
 	str_text = ""
@@ -729,7 +737,9 @@ if __name__ == "__main__":
 		print(parser.parseMain())
 	elif sys.argv[1] == "parseFile":
 		parser = Parser(Tokenizer(str_text))
-
+		ast_nodes = parser.parseFile()
+		for node in ast_nodes:
+			print(node)
 	else:
 		raise Exception("Invalid usage")
   
