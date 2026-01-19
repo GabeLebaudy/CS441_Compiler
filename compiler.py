@@ -186,6 +186,9 @@ class Constant(Expression):
 		super().__init__()
 		self._value = value
 
+	def value(self) -> int:
+		return self._value
+	
 	def __str__(self) -> str:
 		return f"[Constant: value={self._value}]"
 
@@ -194,6 +197,9 @@ class Variable(Expression):
 		super().__init__()
 		self._name = name
 
+	def name(self) -> str:
+		return self._name
+	
 	def __str__(self) -> str:
 		super().__init__()
 		return f"[Variable: name={self._name}]"
@@ -205,6 +211,15 @@ class BinaryOp(Expression):
 		self._op = op
 		self._rhs = rhs
 
+	def lhs(self) -> Expression:
+		return self._lhs
+	
+	def op(self) -> str:
+		return self._op
+	
+	def rhs(self) -> Expression:
+		return self._rhs
+	
 	def __str__(self) -> str:
 		return f"Binary Op: [LHS ={self._lhs}, op={self._op}, RHS={self._rhs}]"
 
@@ -214,6 +229,12 @@ class FieldRead(Expression):
 		self._base = base
 		self._field_name = field_name
 
+	def base(self) -> Expression:
+		return self._base
+	
+	def field_name(self) -> str:
+		return self._field_name
+	
 	def __str__(self) -> str:
 		return f"Field Read: [base={self._base}, field name={self._field_name}]"
 
@@ -224,6 +245,15 @@ class MethodCall(Expression):
 		self._methodname = methodname
 		self._args = args
 
+	def base(self) -> str:
+		return self._base
+	
+	def name(self) -> str:
+		return self._methodname
+	
+	def args(self) -> list[Expression]:
+		return self._args
+	
 	def __str__(self) -> str:
 		args_str = ", ".join(str(arg) for arg in self._args)
 		return (
@@ -235,10 +265,13 @@ class MethodCall(Expression):
 		)
 
 class ClassRef(Expression):
-	def __init__(self, name):
+	def __init__(self, name: str):
 		super().__init__()
 		self._name = name
-  
+	
+	def name(self) -> str:
+		return self._name
+	
 	def __str__(self) -> str:
 		return f"Class Reference: name={self._name}"
 
@@ -250,29 +283,44 @@ class ThisExpr(Expression):
         return "This Expression"
 
 class Assignment(Statement):
-    def __init__(self, variable: Variable, expression: Expression):
-        super().__init__()
-        self._variable = variable
-        self._expression = expression
-        
-    def __str__(self) -> str:
-        return f"Assignment: [variable={self._variable} expression={self._expression}]"
+	def __init__(self, variable: Variable, expression: Expression):
+		super().__init__()
+		self._variable = variable
+		self._expression = expression
+
+	def variable(self) -> Variable:
+		return self._variable
+		
+	def expression(self) -> Expression:
+		return self._expression
+		
+	def __str__(self) -> str:
+		return f"Assignment: [variable={self._variable} expression={self._expression}]"
 
 class UnderscoreAssignment(Statement):
-    def __init__(self, expression: Expression):
-        self._exp = expression
-    
-    def __str__(self) -> str:
-        return f"Underscore statement: [expression={self._exp}]"
+	def __init__(self, expression: Expression):
+		self._exp = expression
+
+	def expression(self) -> Expression:
+		return self._exp
+		
+	def __str__(self) -> str:
+		return f"Underscore statement: [expression={self._exp}]"
 
 class FieldUpdate(Statement):
-    def __init__(self, field_read: FieldRead, expression: Expression):
-        super().__init__()
-        self._field_read = field_read
-        self._expression = expression
-        
-    def __str__(self) -> str:
-        return f"Field Update: [field read={self._field_read} expression={self._expression}]"
+	def __init__(self, field_read: FieldRead, expression: Expression):
+		super().__init__()
+		self._field_read = field_read
+		self._expression = expression
+
+	def field_read(self) -> FieldRead:
+		return self._field_read
+
+	def expression(self) -> Expression:
+		return self._expression
+		
+	def __str__(self) -> str:
+		return f"Field Update: [field read={self._field_read} expression={self._expression}]"
 
 class IfStatement(Statement):
 	def __init__(self, condition: Expression, true_statements: list[Statement], else_statements: list[Statement]):
@@ -280,6 +328,15 @@ class IfStatement(Statement):
 		self._condition = condition
 		self._true_statements = true_statements
 		self._else_statements = else_statements
+	
+	def condition(self) -> Expression:
+		return self._condition
+	
+	def if_statements(self) -> list[Statement]:
+		return self._true_statements
+	
+	def else_statements(self) -> list[Statement]:
+		return self._else_statements
 	
 	def __str__(self) -> str:
 		if_block_statements = "\n".join(str(statement) for statement in self._true_statements)
@@ -295,7 +352,13 @@ class IfOnlyStatement(Statement):
 		super().__init__()
 		self._condition = condition
 		self._statements = statements
-        
+    
+	def condition(self) -> Expression:
+		return self._condition
+	
+	def statements(self) -> list[Statement]:
+		return self._statements
+	
 	def __str__(self) -> str:
 		if_block_statements = "\n".join(str(statement) for statement in self._statements)
 		return (
@@ -309,6 +372,12 @@ class WhileStatement(Statement):
 		self._condition = condition
 		self._statements = statements
 
+	def condition(self) -> Expression:
+		return self._condition
+	
+	def statements(self) -> list[Statement]:
+		return self._statements
+	
 	def __str__(self) -> str:
 		while_block_statements = "\n".join(str(statement) for statement in self._statements)
 		return (
@@ -317,34 +386,56 @@ class WhileStatement(Statement):
 		)
 
 class ReturnStatement(Statement):
-    def __init__(self, exp: Expression):
-        super().__init__()
-        self._exp = exp
-        
-    def __str__(self) -> str:
-        return f"Return statement: [returns {self._exp}]"
+	def __init__(self, exp: Expression):
+		super().__init__()
+		self._exp = exp
+
+	def expression(self) -> Expression:
+		return self._exp
+
+	def __str__(self) -> str:
+		return f"Return statement: [returns {self._exp}]"
 
 class PrintStatement(Statement):
-    def __init__(self, exp):
-        super().__init__()
-        self._exp = exp
-        
-    def __str__(self) -> str:
-        return f"Print statement: [prints {self._exp}]"
+	def __init__(self, exp):
+		super().__init__()
+		self._exp = exp
+    
+	def expression(self) -> Expression:
+		return self._exp
+		
+	def __str__(self) -> str:
+		return f"Print statement: [prints {self._exp}]"
 
 class Argument:
-    def __init__(self, name: str):
-        self._name = name
-        
-    def __str__(self) -> str:
-        return f"Argument: [name={self._name}]"
+	def __init__(self, name: str):
+		self._name = name
+    
+	def name(self) -> str:
+		return self._name
+		
+	def __str__(self) -> str:
+		return f"Argument: [name={self._name}]"
     
 class MethodDefinintion:
-	def __init__(self, args: list[Argument], locals: list[Variable], statements: list[Statement]):
+	def __init__(self, name: str, args: list[Argument], locals: list[Variable], statements: list[Statement]):
+		self._name = name
 		self._args = args
 		self._locals = locals
 		self._statements = statements
-        
+    
+	def name(self) -> str:
+		return self._name
+	
+	def args(self) -> list[Argument]:
+		return self._args
+	
+	def locals(self) -> list[Variable]:
+		return self._locals
+	
+	def statements(self) -> list[Statement]:
+		return self._statements
+
 	def __str__(self) -> str:
 		arguments = " ".join(str(arg) for arg in self._args)
 		local_vars = " ".join(str(local) for local in self._locals)
@@ -361,6 +452,12 @@ class ClassDefinition:
 		self._fields = fields
 		self._methods = methods
     
+	def name(self) -> str:
+		return self._name
+	
+	def fields(self) -> list[Variable]:
+		return self._fields
+	
 	def methods(self) -> list[MethodDefinintion]:
 		return self._methods
 
@@ -374,10 +471,16 @@ class MainMethod:
 		self._vars = vars
 		self._statements = statements
 
+	def vars(self) -> list[Variable]:
+		return self._vars
+	
+	def statements(self) -> list[Statement]:
+		return self._statements
+	
 	def __str__(self) -> str:
 		var_str = " ".join(str(var) for var in self._vars)
 		statements = " ".join(str(statement) for statement in self._statements)
-		return f"Main Method: [variables={var_str}, statements={statements}"
+		return f"Main Method: [variables={var_str}, statements={statements}]"
 
 class ASTNode:
 	def __init__(self, class_def: ClassDefinition, main_method: MainMethod):
@@ -459,7 +562,7 @@ class Parser:
 					self._tokenizer.next()
 			
 			self._tokenizer.next() #Eat right paren
-			return MethodCall(mbase, mname, args)
+			return MethodCall(mbase, mname.name(), args)
 		elif tok == TokenType.ATSIGN: #Class reference
 			cname = self._tokenizer.next()
 			if type(cname) != Identifier:
@@ -652,7 +755,7 @@ class Parser:
 			if not statements:
 				raise Exception("Expected method body")
 
-			methods.append(MethodDefinintion(margs, mlocals, statements))
+			methods.append(MethodDefinintion(mname.name(), margs, mlocals, statements))
 			tok = self._tokenizer.next()
    
 		if tok != TokenType.RIGHT_BRACKET:
@@ -1031,18 +1134,142 @@ class CFGGenerator:
 	def __init__(self, ast_nodes: list[ASTNode]):
 		self._ast_nodes = ast_nodes
 		self._program = IRProgram()
+		self._temp_counter = 0
+		self._label_counter = 0
+		self._current_block = None
 
+		self._class_info = {}
+		self._field_ids = {}
+		self._method_ids = {}
+
+	def new_tmp(self) -> IRVariable:
+		temp = IRVariable(str(self._temp_counter))
+		self._temp_counter += 1
+		return temp
+	
+	def new_label(self) -> str:
+		label = f"l{self._label_counter}"
+		self._label_counter += 1
+		return label
+	
 	def collectClassInfo(self, class_defs: list[ClassDefinition]):
-		pass
+		for cls in class_defs:
+			cname = cls.name()
+			cfields = cls.fields()
+			cmethods = cls.methods()
+
+			self._class_info[cname] = {
+				'fields': cfields,
+				'methods': cmethods
+			}
+
+			for i, f in enumerate(cfields):
+				self._field_ids[(cname, f)] = i
+
+			for i, m in enumerate(cmethods):
+				self._method_ids[(cname, m.name())] = i
 
 	def genVtables(self, class_defs: list[ClassDefinition]):
+		for cls in class_defs:
+			cname = cls.name()
+
+			vtable_name = f"vtbl{cname}"
+			method_labels = [f"m{cname}_{m.name()}" for m in cls.methods()]
+			self._program.addGlobal(GlobalArray(vtable_name, method_labels))
+
+			num_fields = len(cls.fields())
+			field_offsets = [IRConstant(2 + i) for i in range(num_fields)]
+			field_map_values = [IRConstant(num_fields)] + field_offsets
+
+			field_map_name = f"fields{cname}"
+			self._program.addGlobal(GlobalArray(field_map_name, field_map_values))
+
+	def generateExpression(self, exp: Expression, var_map: dict[str, IRVariable]):
 		pass
 
-	def genMethod(self, method_def: MethodDefinintion):
+	def generateFieldUpdate(self, field_update: FieldUpdate, var_map: dict[str, IRVariable]):
 		pass
+
+	def generateIfStatement(self, statement: IfStatement, var_map: dict[str, IRVariable]):
+		pass
+
+	def generateIfOnlyStatement(self, statement: IfOnlyStatement, var_map: dict[str, IRVariable]):
+		pass
+
+	def generateWhileStatement(self, statement: WhileStatement, var_map: dict[str, IRVariable]):
+		pass
+	
+	def generateStatement(self, statement: Statement, var_map: dict[str, IRVariable]) -> IRStatement:
+		if type(statement) == Assignment:
+			name = statement.variable().name()
+			res = self.generateExpression(statement.expression(), var_map)
+
+			if name not in var_map:
+				var_map[name] = self.new_tmp()
+			
+			self._current_block.addStatement(IRAssignment(var_map[name], res))
+		
+		elif type(statement) == UnderscoreAssignment:
+			self.generateExpression(statement.expression(), var_map)
+		elif type(statement, FieldUpdate):
+			self.generateFieldUpdate(statement, var_map)
+		elif type(statement, PrintStatement):
+			res = self.generateExpression(statement.expression(), var_map)
+			self._current_block.addStatement(IRPrint(res))
+		elif type(statement, ReturnStatement):
+			res = self.generateExpression(statement.expression(), var_map)
+			self._current_block.setControlTransfer(IRReturn(res))
+		elif type(statement, IfStatement):
+			self.generateIfStatement(statement, var_map)
+		elif type(statement, IfOnlyStatement):
+			self.generateIfOnlyStatement(statement, var_map)
+		elif type(statement, WhileStatement):
+			self.generateWhileStatement(statement, var_map)
+
+	def genMethod(self, class_name: str, method_def: MethodDefinintion):
+		mlabel = f"m{class_name}_{method_def.name()}"
+		this_param = IRVariable("this")
+		entry_block = BasicBlock(mlabel, [this_param])
+
+		self._current_block = entry_block
+
+		local_vars = {}
+		for l in method_def.locals():
+			temp = self.new_tmp()
+			local_vars[l] = temp
+			self._current_block.addStatement(IRAssignment(temp, IRConstant(0)))
+
+		var_map = {'this', this_param}
+		for i, arg in enumerate(method_def.args()):
+			arg_temp = self.new_tmp()
+			var_map[arg] = arg_temp
+
+		var_map.update(local_vars)
+		for stmt in method_def.statements():
+			self.generateStatement(stmt, var_map)
+
+		if not self._current_block.control():
+			self._current_block.setControlTransfer(IRReturn(IRConstant(0)))
+
+		self._program.addBlock(entry_block)
 
 	def genMainMethod(self, main_method: MainMethod):
-		pass
+		main_block = BasicBlock("main")
+		self._current_block = main_block
+
+		var_map = {}
+		for l in main_method.vars():
+			temp = self.new_tmp()
+			var_map[l] = temp
+			self._current_block.addStatement(IRAssignment(temp, IRConstant(0)))
+
+		for stmt in main_method.statements():
+			self.generateStatement(stmt, var_map)
+
+		if not self._current_block.control():
+			self._current_block.setControlTransfer(IRReturn(IRConstant(0)))
+
+		self._program.addBlock(main_block)
 
 	def convertAstToIr(self) -> IRProgram:
 		classes = []
@@ -1059,7 +1286,7 @@ class CFGGenerator:
   
 		for cls in classes:
 			for m in cls.methods():
-				self.genMethod(m)
+				self.genMethod(cls.name(), m)
 	
 		self.genMainMethod(main_method)
 		return self._program
