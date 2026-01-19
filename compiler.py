@@ -209,7 +209,7 @@ class BinaryOp(Expression):
 		return f"Binary Op: [LHS ={self._lhs}, op={self._op}, RHS={self._rhs}]"
 
 class FieldRead(Expression):
-	def __init__(self, base: str, field_name: str):
+	def __init__(self, base: Expression, field_name: str):
 		super().__init__()
 		self._base = base
 		self._field_name = field_name
@@ -257,6 +257,13 @@ class Assignment(Statement):
         
     def __str__(self) -> str:
         return f"Assignment: [variable={self._variable} expression={self._expression}]"
+
+class UnderscoreAssignment(Statement):
+    def __init__(self, expression: Expression):
+        self._exp = expression
+    
+    def __str__(self) -> str:
+        return f"Underscore statement: [expression={self._exp}]"
 
 class FieldUpdate(Statement):
     def __init__(self, field_read: FieldRead, expression: Expression):
@@ -354,6 +361,9 @@ class ClassDefinition:
 		self._fields = fields
 		self._methods = methods
     
+	def methods(self) -> list[MethodDefinintion]:
+		return self._methods
+
 	def __str__(self) -> str:
 		fields = " ".join(str(field) for field in self._fields)
 		methods = "\n".join(str(method) for method in self._methods)
@@ -370,18 +380,17 @@ class MainMethod:
 		return f"Main Method: [variables={var_str}, statements={statements}"
 
 class ASTNode:
-	def __init__(self, exp: Expression, statement: Statement, class_def: ClassDefinition, main_method: MainMethod):
-		self._exp = exp
-		self._statement = statement
+	def __init__(self, class_def: ClassDefinition, main_method: MainMethod):
 		self._class_def = class_def
 		self._main_def = main_method
+  
+	def getValue(self):
+		return self._class_def if self._class_def else self._main_def
 
 	def __str__(self) -> str:
-		exp_str = f"{str(self._exp)}" if self._exp else ""
-		statement_str = f"{str(self._statement)}" if self._statement else ""
 		class_str = f"{str(self._class_def)}" if self._class_def else ""
-		main_str = f"{str(self._class_def)}" if self._main_def else ""
-		return f"AST Node: {exp_str}, {statement_str} {class_str} {main_str}"
+		main_str = f"{str(self._main_def)}" if self._main_def else ""
+		return f"AST Node: {class_str}{main_str}"
 
 class Parser:
 	def __init__(self, tokenizer: Tokenizer):
@@ -410,7 +419,7 @@ class Parser:
 			return Constant(tok.value())
 		elif type(tok) == Identifier:
 			return Variable(tok.name())
-		elif tok == TokenType.LEFT_PAREN:
+		elif tok == TokenType.LEFT_PAREN: #Arithmetic operation
 			lhs = self.parseExpr()
 			optok = self._tokenizer.next()
 			if type(optok) != Operator:
@@ -421,7 +430,7 @@ class Parser:
 			if closetok != TokenType.RIGHT_PAREN:
 				raise Exception("Expected ')' but got", closetok)
 			return BinaryOp(lhs, optok, rhs)
-		elif tok == TokenType.AMPERSAND:
+		elif tok == TokenType.AMPERSAND: #Field Read
 			base = self.parseExpr()
 			dot = self._tokenizer.next()
 			if dot != TokenType.DOT:
@@ -429,8 +438,8 @@ class Parser:
 			fname = self._tokenizer.next()
 			if type(fname) != Identifier:
 				raise Exception("Expected valid field name but found", fname)
-			return FieldRead(base, fname)
-		elif tok == TokenType.CARET:
+			return FieldRead(base, fname.name())
+		elif tok == TokenType.CARET: #Method invocation
 			mbase = self.parseExpr()
 			mdot = self._tokenizer.next()
 			if mdot != TokenType.DOT:
@@ -451,7 +460,7 @@ class Parser:
 			
 			self._tokenizer.next() #Eat right paren
 			return MethodCall(mbase, mname, args)
-		elif tok == TokenType.ATSIGN:
+		elif tok == TokenType.ATSIGN: #Class reference
 			cname = self._tokenizer.next()
 			if type(cname) != Identifier:
 				raise Exception("Expected identifier, got", cname)
@@ -473,17 +482,13 @@ class Parser:
 
 			exp = self.parseExpr()
 			return Assignment(var_name, exp)
-		elif tok == TokenType.UNDERSCORE:
+		elif tok == TokenType.UNDERSCORE: # Statement to run for side effects
 			eq = self._tokenizer.next()
 			if eq != TokenType.EQUALS:
 				raise Exception("Expected '=' but got:", eq)
-			return self.parseExpr()
-		elif tok == TokenType.NOT:
-			#TODO: Ask about !a.b.c = d
-			fbase = self._tokenizer.next()
-			if type(fbase) != Identifier:
-				raise Exception("Expected identifier, got:", fbase)
-			
+			return UnderscoreAssignment(self.parseExpr())
+		elif tok == TokenType.NOT: #Field update
+			fbase = self.parseExpr()
 			dot = self._tokenizer.next()
 			if dot != TokenType.DOT:
 				raise Exception("Expected '.', got:", dot)
@@ -492,7 +497,7 @@ class Parser:
 			if type(fname) != Identifier:
 				raise Exception("Expected identifier, got:", fname)
 			
-			fread = FieldRead(fbase.name(), fname.name())
+			fread = FieldRead(fbase, fname.name())
 			eq = self._tokenizer.next()
 			if eq != TokenType.EQUALS:
 				raise Exception("Expected '=' but got:", eq)
@@ -664,19 +669,8 @@ class Parser:
 		if with_tok != TokenType.WITH:
 			raise Exception ("Expected with, got:", with_tok)
 		
-		locals = []
-		local_tok = self._tokenizer.next()
-		if type(local_tok) != Identifier:
-			raise Exception("Expected identifier, got:", local_tok)
-		
-		locals.append(local_tok)
-		while(self._tokenizer.peek() == TokenType.COMMA):
-			_ = self._tokenizer.next()
-			local_tok = self._tokenizer.next()
-			if type(local_tok) != Identifier:
-				raise Exception("Expected identifier, got:", local_tok)
-			
-			locals.append(local_tok)
+		local_identifiers = self.getCommaSepIdentifiers()
+		locals = (Variable(i.name()) for i in local_identifiers)
 		
 		colon = self._tokenizer.next()
 		if colon != TokenType.COLON:
@@ -695,15 +689,381 @@ class Parser:
 			if open_token == TokenType.CLASS:
 				print("Parsing Class!")
 				class_def = self.parseClass()
-				nodes.append(ASTNode(None, None, class_def, None))
+				nodes.append(ASTNode(class_def, None))
 			elif open_token == TokenType.MAIN:
 				print("Parsing main")
 				main_def = self.parseMain()
-				nodes.append(ASTNode(None, None, None, main_def))
+				nodes.append(ASTNode(None, main_def))
 			else:
 				raise Exception("Unknown starting token:", open_token)
 		return nodes
-			
+
+#Base class (Might come in handy later)
+class IRValue:
+    pass
+
+class IRVariable(IRValue):
+    def __init__(self, name: str):
+        self._name = name
+        
+    def name(self) -> str:
+        return self._name
+    
+    def __str__(self) -> str:
+        return f"%{self._name}"
+
+class IRConstant(IRValue):
+    def __init__(self, value: int):
+        self._value = value
+    
+    def value(self) -> int:
+        return self._value
+    
+    def __str__(self) -> str:
+        return f"{self._value}"
+
+class IRGlobal(IRValue):
+    def __init__(self, name: str):
+        self._name = name
+        
+    def name(self) -> str:
+        return self._name
+    
+    def __str__(self) -> str:
+        return f"@{self._name}"
+
+class IRStatement:
+    pass
+
+class IRAssignment(IRStatement):
+    def __init__(self, name: str, value):
+        self._name = name
+        self._value = value
+        
+    def name(self) -> str:
+        return self._name
+    
+    def __str__(self) -> str:
+        return f"%{self._name} = {self._value}" 
+
+class IRBinaryOp(IRStatement):
+    def __init__(self, name: IRVariable, lhs: IRValue, op: str, rhs: IRValue):
+        self._name = name
+        self._lhs = lhs
+        self._op = op
+        self._rhs = rhs
+        
+    def name(self) -> IRVariable:
+        return self._name
+    
+    def lhs(self) -> IRValue:
+        return self._lhs
+    
+    def op(self) -> str:
+        return self._op
+    
+    def rhs(self) -> IRValue:
+        return self._rhs
+    
+    def __str__(self) -> str:
+        return f"{self._name} = {self._lhs} {self._op} {self._rhs}"
+
+class IRCall(IRStatement):
+    def __init__(self, name: IRVariable, code_addr: IRVariable, receiver: IRVariable, args: list[IRValue]):
+        self._name = name
+        self._code_addr = code_addr
+        self._receiver = receiver
+        self._args = args
+        
+    def name(self) -> IRVariable:
+        return self._name
+    
+    def code_addr(self) -> IRVariable:
+        return self._code_addr
+    
+    def receiver(self) -> IRVariable:
+        return self._receiver
+    
+    def args(self) -> list[IRValue]:
+        return self._args
+    
+    def __str__(self) -> str:
+        args_str = ", " + ", ".join(str(a) for a in self._args)
+        return f"{self._name} = call({self._code_addr}, {self._receiver}{args_str})"
+
+class IRPhi(IRStatement):
+    def __init__(self, name: IRVariable, prior_blocks: list[tuple[str, IRVariable]]):
+        self._name = name
+        self._prior_blocks = prior_blocks
+        
+    def name(self) -> IRVariable:
+        return self._name
+    
+    def prior_blocks(self) -> list[tuple[str, IRVariable]]:
+        return self._prior_blocks
+    
+    def __str__(self) -> str:
+        prior_block_str = ", ".join(f"{label}, {var}" for label, var in self._prior_blocks)
+        return f"{self._name} = phi({prior_block_str})"
+    
+class IRAlloc(IRStatement):
+    def __init__(self, name: IRVariable, value: IRConstant):
+        self._name = name
+        self._val = value
+        
+    def name(self) -> IRVariable:
+        return self._name
+    
+    def val(self) -> IRConstant:
+        return self._constant
+    
+    def __str__(self) -> str:
+        return f"{self._name} = alloc({self._value})"
+    
+class IRPrint(IRStatement):
+    def __init__(self, print_var: IRValue):
+        self._print_var = print_var
+        
+    def print_var(self) -> IRValue:
+        return self._print_var
+    
+    def __str__(self) -> str:
+        return f"print({self._print_var})"
+    
+class IRGelElt(IRStatement):
+    def __init__(self, name: IRVariable, arr_pointer: IRVariable, ind: IRValue):
+        self._name = name
+        self._arr_pointer = arr_pointer
+        self._ind = ind
+        
+    def name(self) -> IRVariable:
+        return self._name
+    
+    def arr_pointer(self) -> IRVariable:
+        return self._arr_pointer
+    
+    def ind(self) -> IRValue:
+        return self._ind
+    
+    def __str__(self) -> str:
+        return f"{self._name} = getelt({self._arr_pointer}, {self._ind})"
+
+class IRSetElt(IRStatement):
+    def __init__(self, arr_pointer: IRVariable, ind: IRValue, val: IRValue):
+        self._arr_pointer = arr_pointer
+        self._ind = ind
+        self._val = val
+        
+    def arr_pointer(self) -> IRVariable:
+        return self._arr_pointer
+    
+    def ind(self) -> IRValue:
+        return self._ind
+    
+    def val(self) -> IRValue:
+        return self._val
+    
+    def __str__(self) -> str:
+        return f"setelt({self._arr_pointer}, {self._ind}, {self._val})"
+    
+class IRLoad(IRStatement):
+    def __init__(self, name: IRVariable, base: IRVariable):
+        self._name = name
+        self._base = base
+        
+    def name(self) -> IRVariable:
+        return self._name
+    
+    def base(self) -> IRVariable:
+        return self._base
+    
+    def __str__(self) -> str:
+        return f"{self._name} = load({self._base})"
+
+class IRStore(IRStatement):
+    def __init__(self, base: IRVariable, val: IRValue):
+        self._base = base
+        self._val = val
+        
+    def base(self) -> IRVariable:
+        return self._base
+    
+    def val(self) -> IRValue:
+        return self._val
+    
+    def __str__(self) -> str:
+        return f"store({self._base}, {self._val})"
+
+class IRControlTransfer:
+    pass
+
+class IRJump(IRControlTransfer):
+    def __init__(self, name: str):
+        self._name = name
+        
+    def name(self) -> str:
+        return self._name
+    
+    def __str__(self) -> str:
+        return f"jump {self._name}"
+    
+class IRConditional(IRControlTransfer):
+	def __init__(self, condition: IRVariable, if_name: str, else_name: str):
+		self._condition = condition
+		self._if_name = if_name
+		self._else_name = else_name
+  
+	def condition(self) -> IRVariable:
+		return self._condition
+    
+	def if_name(self) -> str:
+		return self._if_name
+    
+	def else_name(self) -> str:
+		return self._else_name
+    
+	def __str__(self) -> str:
+		return f"if {self._condition}, then {self._if_name} else {self._else_name}"
+
+class IRReturn(IRControlTransfer):
+    def __init__(self, return_val: IRValue):
+        self._return_val = return_val
+        
+    def return_val(self) -> str:
+        return self._return_val
+    
+    def __str__(self) -> str:
+        return f"ret {self._return_val}"
+    
+class IRFail(IRControlTransfer):
+    def __init__(self, fail_reason: str):
+        self._fail = fail_reason
+        
+    def fail(self) -> str:
+        return self._fail
+    
+    def __str__(self) -> str:
+        return f"fail {self._fail}"
+
+class BasicBlock:
+	def __init__(self, name: str, params: list = None):
+		self._name = name
+		self._params = params if params else []
+		self._statements = []
+		self._control = None 
+    
+	def name(self) -> str:
+		return self._name
+
+	def params(self) -> list[IRVariable]:
+		return self._params
+
+	def statements(self) -> list[IRStatement]:
+		return self._statements
+
+	def control(self) -> IRControlTransfer:
+		return self._control
+
+	def addStatement(self, statement: IRStatement):
+		self._statements.append(statement)
+  
+	def setControlTransfer(self, control_transfer: IRControlTransfer):
+		self._control = control_transfer
+  
+	def __str__(self) -> str:
+		if self._params:
+			params_str = ", ".join(str(p) for p in self._params)
+			result = f"{self._name}({params_str}):\n"
+		else:
+			result = f"{self._name}:\n"
+
+		statement_str = "\n".join(str(stmt) for stmt in self._statements)
+		result += statement_str
+		if self._control:
+			result += str(self._control) + "\n"
+
+		return result
+
+class GlobalArray:
+    def __init__(self, name: str, values: list[IRValue]):
+        self._name = name
+        self._values = values
+        
+    def name(self) -> str:
+        return self._name
+        
+    def values(self) -> list[IRValue]:
+        return self._values
+    
+    def __str__(self) -> str:
+        values_str = ", ".join(str(v) for v in self._values)
+        return f"global array @{self._name}: {{ {values_str} }}"
+
+class IRProgram:
+	def __init__(self, globals: list[GlobalArray], blocks: list[BasicBlock]):
+		self._globals = globals
+		self._blocks = blocks
+        
+	def globals(self) -> list[GlobalArray]:
+		return self._globals
+    
+	def blocks(self) -> list[BasicBlock]:
+		return self._blocks
+    
+	def addGlobal(self, global_arr: GlobalArray):
+		self._globals.append(global_arr)
+        
+	def addBlock(self, block: BasicBlock):
+		self._blocks.append(block)
+
+	def __str__(self) -> str:
+		result = "data:\n"
+		for g in self._globals:
+			result += str(g) + "\n"
+
+		result += "\ncode:\n"
+		for b in self._blocks:
+			result += "\n" + str(b)
+
+		return result
+
+class CFGGenerator:
+	def __init__(self, ast_nodes: list[ASTNode]):
+		self._ast_nodes = ast_nodes
+		self._program = IRProgram()
+
+	def collectClassInfo(self, class_defs: list[ClassDefinition]):
+		pass
+
+	def genVtables(self, class_defs: list[ClassDefinition]):
+		pass
+
+	def genMethod(self, method_def: MethodDefinintion):
+		pass
+
+	def genMainMethod(self, main_method: MainMethod):
+		pass
+
+	def convertAstToIr(self) -> IRProgram:
+		classes = []
+		main_method = None
+		for node in self._ast_nodes:
+			val = node.getValue()
+			if type(val) == ClassDefinition:
+				classes.append(val)
+			else:
+				main_method = val
+				
+		self.collectClassInfo(classes)
+		self.genVtables()
+  
+		for cls in classes:
+			for m in cls.methods():
+				self.genMethod(m)
+	
+		self.genMainMethod(main_method)
+		return self._program
+
 if __name__ == "__main__":
 	if len(sys.argv) < 3:
 		print("Usage: comp {tokenize|parseExpr|parseStatement|parseClass|parseFile} file")

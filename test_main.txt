@@ -7,6 +7,10 @@ class B [
     fields y
     method m() with locals:
       return 0
+
+    method oneArg(a) with locals b:
+      b = (a * a)
+      return b
 ]
 
 main with x:
