@@ -56,11 +56,14 @@ def printToken(token):
 		print(token)
 
 class Operator:
-    def __init__(self, op: str):
-        self._op = op
+	def __init__(self, op: str):
+		self._op = op
     
-    def __str__(self) -> str:
-        return f"Operator: op={self._op}"
+	def op(self) -> str:
+		return self._op
+
+	def __str__(self) -> str:
+		return f"Operator: op={self._op}"
     
 class Number:
 	def __init__(self, num: int):
@@ -707,7 +710,9 @@ class Parser:
 			raise Exception("Expected fields, got:", tok)
 
 		field_ids = self.getCommaSepIdentifiers()
-		fields = (Variable(i.name()) for i in field_ids)
+		fields = []
+		for i in field_ids:
+			fields.append(Variable(i.name()))
 
 		methods = []
 		tok = self._tokenizer.next()
@@ -722,7 +727,9 @@ class Parser:
 
 			statements = []
 			method_identifiers = self.getCommaSepIdentifiers()
-			margs = (Argument(i.name()) for i in method_identifiers)
+			margs = []
+			for i in method_identifiers:
+				margs.append(Variable(i.name()))
 			
 			tok = self._tokenizer.next()
 			if tok != TokenType.RIGHT_PAREN:
@@ -737,7 +744,10 @@ class Parser:
 				raise Exception("Expected locals, got:", tok)
 
 			local_identifiers = self.getCommaSepIdentifiers()
-			mlocals = (Variable(i.name()) for i in local_identifiers)
+			mlocals = []
+			for i in local_identifiers:
+				mlocals.append(Variable(i.name()))
+    
 			while(self._tokenizer.peek() == TokenType.COMMA):
 				_ = self._tokenizer.next()
 				local_tok = self._tokenizer.next()
@@ -761,7 +771,7 @@ class Parser:
 		if tok != TokenType.RIGHT_BRACKET:
 			raise Exception("Expected ']', but got:", tok)
 
-		return ClassDefinition(cname, fields, methods)			
+		return ClassDefinition(cname.name(), fields, methods)			
 	
 	def parseMain(self) -> MainMethod:
 		main_tok = self._tokenizer.next()
@@ -773,7 +783,9 @@ class Parser:
 			raise Exception ("Expected with, got:", with_tok)
 		
 		local_identifiers = self.getCommaSepIdentifiers()
-		locals = (Variable(i.name()) for i in local_identifiers)
+		locals = []
+		for i in local_identifiers:
+			locals.append(Variable(i.name()))
 		
 		colon = self._tokenizer.next()
 		if colon != TokenType.COLON:
@@ -847,7 +859,7 @@ class IRAssignment(IRStatement):
         return self._name
     
     def __str__(self) -> str:
-        return f"%{self._name} = {self._value}" 
+        return f"	{self._name} = {self._value}" 
 
 class IRBinaryOp(IRStatement):
     def __init__(self, name: IRVariable, lhs: IRValue, op: str, rhs: IRValue):
@@ -869,7 +881,7 @@ class IRBinaryOp(IRStatement):
         return self._rhs
     
     def __str__(self) -> str:
-        return f"{self._name} = {self._lhs} {self._op} {self._rhs}"
+        return f"	{self._name} = {self._lhs} {self._op} {self._rhs}"
 
 class IRCall(IRStatement):
     def __init__(self, name: IRVariable, code_addr: IRVariable, receiver: IRVariable, args: list[IRValue]):
@@ -892,7 +904,7 @@ class IRCall(IRStatement):
     
     def __str__(self) -> str:
         args_str = ", " + ", ".join(str(a) for a in self._args)
-        return f"{self._name} = call({self._code_addr}, {self._receiver}{args_str})"
+        return f"	{self._name} = call({self._code_addr}, {self._receiver}{args_str})"
 
 class IRPhi(IRStatement):
     def __init__(self, name: IRVariable, prior_blocks: list[tuple[str, IRVariable]]):
@@ -907,21 +919,21 @@ class IRPhi(IRStatement):
     
     def __str__(self) -> str:
         prior_block_str = ", ".join(f"{label}, {var}" for label, var in self._prior_blocks)
-        return f"{self._name} = phi({prior_block_str})"
+        return f"	{self._name} = phi({prior_block_str})"
     
 class IRAlloc(IRStatement):
-    def __init__(self, name: IRVariable, value: IRConstant):
+    def __init__(self, name: IRVariable, size: int):
         self._name = name
-        self._val = value
+        self._size = size
         
     def name(self) -> IRVariable:
         return self._name
     
-    def val(self) -> IRConstant:
-        return self._constant
+    def val(self) -> int:
+        return self._size
     
     def __str__(self) -> str:
-        return f"{self._name} = alloc({self._value})"
+        return f"	{self._name} = alloc({self._size})"
     
 class IRPrint(IRStatement):
     def __init__(self, print_var: IRValue):
@@ -931,7 +943,7 @@ class IRPrint(IRStatement):
         return self._print_var
     
     def __str__(self) -> str:
-        return f"print({self._print_var})"
+        return f"	print({self._print_var})"
     
 class IRGelElt(IRStatement):
     def __init__(self, name: IRVariable, arr_pointer: IRVariable, ind: IRValue):
@@ -949,7 +961,7 @@ class IRGelElt(IRStatement):
         return self._ind
     
     def __str__(self) -> str:
-        return f"{self._name} = getelt({self._arr_pointer}, {self._ind})"
+        return f"	{self._name} = getelt({self._arr_pointer}, {self._ind})"
 
 class IRSetElt(IRStatement):
     def __init__(self, arr_pointer: IRVariable, ind: IRValue, val: IRValue):
@@ -967,7 +979,7 @@ class IRSetElt(IRStatement):
         return self._val
     
     def __str__(self) -> str:
-        return f"setelt({self._arr_pointer}, {self._ind}, {self._val})"
+        return f"	setelt({self._arr_pointer}, {self._ind}, {self._val})"
     
 class IRLoad(IRStatement):
     def __init__(self, name: IRVariable, base: IRVariable):
@@ -981,7 +993,7 @@ class IRLoad(IRStatement):
         return self._base
     
     def __str__(self) -> str:
-        return f"{self._name} = load({self._base})"
+        return f"	{self._name} = load({self._base})"
 
 class IRStore(IRStatement):
     def __init__(self, base: IRVariable, val: IRValue):
@@ -995,7 +1007,7 @@ class IRStore(IRStatement):
         return self._val
     
     def __str__(self) -> str:
-        return f"store({self._base}, {self._val})"
+        return f"	store({self._base}, {self._val})"
 
 class IRControlTransfer:
     pass
@@ -1008,7 +1020,7 @@ class IRJump(IRControlTransfer):
         return self._name
     
     def __str__(self) -> str:
-        return f"jump {self._name}"
+        return f"	jump {self._name}"
     
 class IRConditional(IRControlTransfer):
 	def __init__(self, condition: IRVariable, if_name: str, else_name: str):
@@ -1026,7 +1038,7 @@ class IRConditional(IRControlTransfer):
 		return self._else_name
     
 	def __str__(self) -> str:
-		return f"if {self._condition}, then {self._if_name} else {self._else_name}"
+		return f"	if {self._condition}, then {self._if_name} else {self._else_name}"
 
 class IRReturn(IRControlTransfer):
     def __init__(self, return_val: IRValue):
@@ -1036,7 +1048,7 @@ class IRReturn(IRControlTransfer):
         return self._return_val
     
     def __str__(self) -> str:
-        return f"ret {self._return_val}"
+        return f"	ret {self._return_val}"
     
 class IRFail(IRControlTransfer):
     def __init__(self, fail_reason: str):
@@ -1046,7 +1058,7 @@ class IRFail(IRControlTransfer):
         return self._fail
     
     def __str__(self) -> str:
-        return f"fail {self._fail}"
+        return f"	fail {self._fail}"
 
 class BasicBlock:
 	def __init__(self, name: str, params: list = None):
@@ -1081,6 +1093,8 @@ class BasicBlock:
 			result = f"{self._name}:\n"
 
 		statement_str = "\n".join(str(stmt) for stmt in self._statements)
+		if statement_str:
+			statement_str += "\n"
 		result += statement_str
 		if self._control:
 			result += str(self._control) + "\n"
@@ -1103,9 +1117,9 @@ class GlobalArray:
         return f"global array @{self._name}: {{ {values_str} }}"
 
 class IRProgram:
-	def __init__(self, globals: list[GlobalArray], blocks: list[BasicBlock]):
-		self._globals = globals
-		self._blocks = blocks
+	def __init__(self):
+		self._globals = []
+		self._blocks = []
         
 	def globals(self) -> list[GlobalArray]:
 		return self._globals
@@ -1141,14 +1155,14 @@ class CFGGenerator:
 		self._class_info = {}
 		self._field_ids = {}
 		self._method_ids = {}
-
+  
 	def new_tmp(self) -> IRVariable:
 		temp = IRVariable(str(self._temp_counter))
 		self._temp_counter += 1
 		return temp
 	
-	def new_label(self) -> str:
-		label = f"l{self._label_counter}"
+	def new_label(self, prefix: str = "l") -> str:
+		label = f"{prefix}{self._label_counter}"
 		self._label_counter += 1
 		return label
 	
@@ -1184,20 +1198,230 @@ class CFGGenerator:
 			field_map_name = f"fields{cname}"
 			self._program.addGlobal(GlobalArray(field_map_name, field_map_values))
 
+	def generateBinaryOp(self, exp: BinaryOp, var_map: dict[str, IRVariable]) -> IRValue:
+		lhs = self.generateExpression(exp.lhs(), var_map)
+		rhs = self.generateExpression(exp.rhs(), var_map)
+  
+		left_check = self.new_tmp()
+		self._current_block.addStatement(IRBinaryOp(left_check, lhs, "&", IRConstant(1)))
+
+		ok_left_label = self.new_label("ok_left")
+		fail_label = self.new_label("not_a_number")
+		fail_block = BasicBlock(fail_label)
+		fail_block.setControlTransfer(IRFail("Not a Number"))
+  
+		self._current_block.setControlTransfer(IRConditional(left_check, ok_left_label, fail_label))
+		self._program.addBlock(self._current_block)
+		self._program.addBlock(fail_block)
+  
+		ok_left_block = BasicBlock(ok_left_label)
+		self._current_block = ok_left_block
+
+		right_check = self.new_tmp()
+		self._current_block.addStatement(IRBinaryOp(right_check, rhs, "&", IRConstant(1)))
+
+		ok_right_label = self.new_label("ok_right")
+		self._current_block.setControlTransfer(IRConditional(right_check, ok_right_label, fail_label))
+		self._program.addBlock(self._current_block)
+  
+		res = self.new_tmp()
+		op_str = exp.op().op()
+
+		self._current_block.addStatement(IRBinaryOp(res, lhs, op_str, rhs))
+		self._program.addBlock(self._current_block)
+		return res
+
+	def generateFieldRead(self, exp: FieldRead, var_map: dict[str, IRVariable]):
+		obj_base = self.generateExpression(exp.base(), var_map)
+  
+		ptr_check = self.new_tmp()
+		self._current_block.addStatement(IRBinaryOp(ptr_check, obj_base, "&", 1))
+  
+		ok_ptr_label = self.new_label("ok_ptr")
+		fail_label = self.new_label("not_a_pointer")
+
+		fail_block = BasicBlock(fail_label)
+		fail_block.setControlTransfer(IRFail("Not a Pointer"))
+
+		self._current_block.setControlTransfer(IRConditional(ptr_check, fail_label, ok_ptr_label))
+		self._program.addBlock(self._current_block)
+		self._program.addBlock(fail_block)
+  
+		ok_block = BasicBlock(ok_ptr_label)
+		self._current_block = ok_block
+
+		field_value = self.new_tmp()
+		self._current_block.addStatement(IRGelElt(field_value, obj_base, IRConstant(2)))
+		self._program.addBlock(self._current_block)
+		return field_value
+  
+	def generateMethodCall(self, exp: MethodCall, var_map: dict[str, IRVariable]):
+		receiver = self.generateExpression(exp.base(), var_map)
+
+		ptr_check = self.new_tmp()
+		self._current_block.addStatement(IRBinaryOp(ptr_check, receiver, "&", 1))
+		ok_ptr_label = self.new_label("ok_pointer_call")
+		fail_label = self.new_label("not_a_pointer")
+
+		fail_block = BasicBlock(fail_label)
+		fail_block.setControlTransfer(IRFail("Not a Pointer"))
+		self._current_block.setControlTransfer(IRConditional(ptr_check, fail_label, ok_ptr_label))
+		self._program.addBlock(self._current_block)
+		self._program.addBlock(fail_block)
+
+		ok_block = BasicBlock(ok_ptr_label)
+		self._current_block = ok_block
+  
+		vtable_ptr = self.new_tmp()
+		self._current_block.addStatement(IRLoad(vtable_ptr, receiver))
+		method_addr = self.new_tmp()
+		self._current_block.addStatement(IRGelElt(method_addr, vtable_ptr, IRConstant(0)))
+
+		arg_vals = []
+		for arg_exp in exp.args():
+			arg_vals.append(self.generateExpression(arg_exp, var_map))
+		res = self.new_tmp()
+		self._current_block.addStatement(IRCall(res, method_addr, receiver, arg_vals))
+		self._program.addBlock(self._current_block)
+		return res
+
+	def allocateClass(self, exp: ClassRef):
+		cname = exp.name()
+
+		if cname not in self._class_info:
+			raise Exception("Undefined class:", cname)
+
+		num_fields = len(self._class_info[cname]["fields"])
+		obj_size = 2 + num_fields
+  
+		obj_ptr = self.new_tmp()
+		self._current_block.addStatement(IRAlloc(obj_ptr, obj_size)) #Change to IR Constant?
+
+		vtable_global = IRGlobal(f"vtbl{cname}")
+		self._current_block.addStatement(IRStore(obj_ptr, vtable_global))
+		field_map_addr = self.new_tmp()
+		self._current_block.addStatement(IRBinaryOp(field_map_addr, obj_ptr, "+", IRConstant(8)))
+
+		field_map_global = IRGlobal(f"fields{cname}")
+		self._current_block.addStatement(IRStore(field_map_addr, field_map_global))
+		return obj_ptr
+
 	def generateExpression(self, exp: Expression, var_map: dict[str, IRVariable]):
-		pass
+		if type(exp) == Constant:
+			return IRConstant((exp.value() << 1) | 1)
+		elif type(exp) == Variable:
+			vname = exp.name()
+			if vname not in var_map:
+				raise Exception("Variable not defined:", vname)
+			return var_map[vname]
+		elif type(exp) == ThisExpr:
+			if 'this' not in var_map:
+				Exception("'this' used outside of method context")
+			return var_map['this']
+		elif type(exp) == BinaryOp:
+			return self.generateBinaryOp(exp, var_map)
+		elif type(exp) == FieldRead:
+			return self.generateFieldRead(exp, var_map)
+		elif type(exp) == MethodCall:
+			return self.generateMethodCall(exp, var_map)
+		elif type(exp) == ClassRef:
+			return self.allocateClass(exp)
+		else:
+			raise Exception("Unexpected expression:", exp)
 
 	def generateFieldUpdate(self, field_update: FieldUpdate, var_map: dict[str, IRVariable]):
-		pass
+		field_read = field_update.field_read()
+		obj = self.generateExpression(field_read.base(), var_map)
+		value = self.generateExpression(field_update.expression(), var_map)
+
+		ptr_check = self.new_tmp()
+		self._current_block.addStatement(IRBinaryOp(ptr_check, field_read, "&", IRConstant(1)))
+  
+		ok_ptr_label = self.new_label("ok_poiter")
+		fail_label = self.new_label("not_a_pointer")
+		fail_block = BasicBlock(fail_label)
+		fail_block.setControlTransfer(IRFail("Not a Pointer"))
+		self._current_block.setControlTransfer(IRConditional(ptr_check, fail_label, ok_ptr_label))
+
+		self._program.addBlock(self._current_block)
+		self._program.addBlock(fail_block)
+  
+		ok_ptr_block = BasicBlock(ok_ptr_label)
+		self._current_block = ok_ptr_block
+		self._current_block.addStatement(IRSetElt(obj, IRConstant(2), value))
+		self._program.addBlock(self._current_block)
 
 	def generateIfStatement(self, statement: IfStatement, var_map: dict[str, IRVariable]):
-		pass
+		condition = self.generateExpression(statement.condition())
+
+		then_label = self.new_label("then")
+		else_label = self.new_label("else")
+		merge_label = self.new_label("merge")
+  
+		self._current_block.setControlTransfer(IRConditional(condition, then_label, else_label))
+		self._program.addBlock(self._current_block)
+
+		then_block = BasicBlock(then_label)
+		self._current_block = then_block
+		for s in statement.if_statements():
+			self.generateStatement(s, var_map)
+		if not self._current_block.control():
+			self._current_block.setControlTransfer(IRJump(merge_label))
+		self._program.addBlock(self._current_block)
+  
+		else_block = BasicBlock(else_label)
+		self._current_block = else_block
+		for s in statement.else_statements():
+			self.generateStatement(s, var_map)
+		if not self._current_block.control():
+			self._current_block.setControlTransfer(IRJump("merge_label"))
+		self._program.addBlock(self._current_block)
+  
+		merge_block = BasicBlock(merge_label)
+		self._current_block = merge_block
 
 	def generateIfOnlyStatement(self, statement: IfOnlyStatement, var_map: dict[str, IRVariable]):
-		pass
+		condition = statement.condition()
 
+		then_label = self.new_label("then")
+		merge_label = self.new_label("merge")
+  
+		self._current_block.setControlTransfer(IRConditional(condition, then_label, merge_label))
+		then_block = BasicBlock(then_label)
+		self._current_block = then_block
+		for s in statement.statements():
+			self.generateStatement(s, var_map)
+		if not self._current_block.control():
+			self._current_block.setControlTransfer(IRJump(merge_label))
+		self._program.add(self._current_block)
+
+		merge_block = BasicBlock(merge_label)
+		self._current_block = merge_block
+  
 	def generateWhileStatement(self, statement: WhileStatement, var_map: dict[str, IRVariable]):
-		pass
+		top_label = self.new_label("loop_top")
+		body_label = self.new_label("loop_body")
+		end_label = self.new_label("loop_end")
+  
+		self._current_block.setControlTransfer(IRJump(top_label))
+		self._program.addBlock(self._current_block)
+  
+		top_block = BasicBlock(top_label)
+		self._current_block = top_block
+		condition = self.generateExpression(statement.condition(), var_map) 
+		self._current_block.addStatement(IRConditional(condition, body_label, end_label))
+		self._program.addBlock(self._current_block)
+  
+		body_block = BasicBlock(body_label)
+		self._current_block = body_block
+		for s in statement.statements():
+			self.generateStatement(s, var_map)
+		if not self._current_block.control():
+			self._current_block.setControlTransfer(IRJump(end_label))
+		self._program.addBlock(body_block)
+
+		end_block = BasicBlock(end_label)
+		self._current_block = end_block
 	
 	def generateStatement(self, statement: Statement, var_map: dict[str, IRVariable]) -> IRStatement:
 		if type(statement) == Assignment:
@@ -1211,19 +1435,19 @@ class CFGGenerator:
 		
 		elif type(statement) == UnderscoreAssignment:
 			self.generateExpression(statement.expression(), var_map)
-		elif type(statement, FieldUpdate):
+		elif type(statement) == FieldUpdate:
 			self.generateFieldUpdate(statement, var_map)
-		elif type(statement, PrintStatement):
+		elif type(statement) == PrintStatement:
 			res = self.generateExpression(statement.expression(), var_map)
 			self._current_block.addStatement(IRPrint(res))
-		elif type(statement, ReturnStatement):
+		elif type(statement) == ReturnStatement:
 			res = self.generateExpression(statement.expression(), var_map)
 			self._current_block.setControlTransfer(IRReturn(res))
-		elif type(statement, IfStatement):
+		elif type(statement) == IfStatement:
 			self.generateIfStatement(statement, var_map)
-		elif type(statement, IfOnlyStatement):
+		elif type(statement) == IfOnlyStatement:
 			self.generateIfOnlyStatement(statement, var_map)
-		elif type(statement, WhileStatement):
+		elif type(statement) == WhileStatement:
 			self.generateWhileStatement(statement, var_map)
 
 	def genMethod(self, class_name: str, method_def: MethodDefinintion):
@@ -1239,10 +1463,10 @@ class CFGGenerator:
 			local_vars[l] = temp
 			self._current_block.addStatement(IRAssignment(temp, IRConstant(0)))
 
-		var_map = {'this', this_param}
-		for i, arg in enumerate(method_def.args()):
+		var_map = {'this': this_param}
+		for arg in method_def.args():
 			arg_temp = self.new_tmp()
-			var_map[arg] = arg_temp
+			var_map[arg.name()] = arg_temp
 
 		var_map.update(local_vars)
 		for stmt in method_def.statements():
@@ -1282,7 +1506,7 @@ class CFGGenerator:
 				main_method = val
 				
 		self.collectClassInfo(classes)
-		self.genVtables()
+		self.genVtables(classes)
   
 		for cls in classes:
 			for m in cls.methods():
@@ -1291,6 +1515,11 @@ class CFGGenerator:
 		self.genMainMethod(main_method)
 		return self._program
 
+class Optimizer:
+    def __init__(self, ir_program: IRProgram):
+        self._ir_program = ir_program
+        
+    
 if __name__ == "__main__":
 	if len(sys.argv) < 3:
 		print("Usage: comp {tokenize|parseExpr|parseStatement|parseClass|parseFile} file")
@@ -1327,6 +1556,9 @@ if __name__ == "__main__":
 		ast_nodes = parser.parseFile()
 		for node in ast_nodes:
 			print(node)
+   
+		cfg_generator = CFGGenerator(ast_nodes)
+		print(cfg_generator.convertAstToIr())
 	else:
 		raise Exception("Invalid usage")
   
