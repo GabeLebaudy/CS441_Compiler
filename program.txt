@@ -1,0 +1,18 @@
+class example [
+	fields temp
+
+	method ifStatement(a, b) with locals c:
+		if (a > 5): {
+			c = a
+		} else {
+			c = b
+		}
+		return c
+
+	method getTemp() with locals:
+		return &this.temp
+]
+
+main with x:
+	x = @example
+	print(^x.ifStatement(0, 3))

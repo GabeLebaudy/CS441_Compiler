@@ -3,6 +3,7 @@ class A [
     method m() with locals:
       return &this.x
 ]
+
 class B [
     fields y
     method m() with locals:

@@ -444,7 +444,7 @@ class MethodDefinintion:
 		local_vars = " ".join(str(local) for local in self._locals)
 		statements = "\n".join(str(statement) for statement in self._statements)
 		return (
-				f"Method Definition: [Arguments={arguments}, "
+				f"Method Definition: Name={self._name} [Arguments={arguments}, "
       			f"Local Variables={local_vars}, "
       			f"Statements={statements}]"
 		)
@@ -1172,15 +1172,24 @@ class CFGGenerator:
 			cfields = cls.fields()
 			cmethods = cls.methods()
 
+			if cname in self._class_info:
+				raise Exception("Class is already defined:", cname)
+
 			self._class_info[cname] = {
 				'fields': cfields,
 				'methods': cmethods
 			}
 
 			for i, f in enumerate(cfields):
-				self._field_ids[(cname, f)] = i
+				if (cname, f.name()) in self._field_ids:
+					raise Exception("Class field already defined:", f.name())
+ 
+				self._field_ids[(cname, f.name())] = i
 
 			for i, m in enumerate(cmethods):
+				if (cname, m.name()) in self._method_ids:
+					raise Exception("Method is already defined:", m.name())
+ 
 				self._method_ids[(cname, m.name())] = i
 
 	def genVtables(self, class_defs: list[ClassDefinition]):
@@ -1352,7 +1361,7 @@ class CFGGenerator:
 		self._program.addBlock(self._current_block)
 
 	def generateIfStatement(self, statement: IfStatement, var_map: dict[str, IRVariable]):
-		condition = self.generateExpression(statement.condition())
+		condition = self.generateExpression(statement.condition(), var_map)
 
 		then_label = self.new_label("then")
 		else_label = self.new_label("else")
@@ -1374,7 +1383,7 @@ class CFGGenerator:
 		for s in statement.else_statements():
 			self.generateStatement(s, var_map)
 		if not self._current_block.control():
-			self._current_block.setControlTransfer(IRJump("merge_label"))
+			self._current_block.setControlTransfer(IRJump(merge_label))
 		self._program.addBlock(self._current_block)
   
 		merge_block = BasicBlock(merge_label)
@@ -1393,7 +1402,7 @@ class CFGGenerator:
 			self.generateStatement(s, var_map)
 		if not self._current_block.control():
 			self._current_block.setControlTransfer(IRJump(merge_label))
-		self._program.add(self._current_block)
+		self._program.addBlock(self._current_block)
 
 		merge_block = BasicBlock(merge_label)
 		self._current_block = merge_block
@@ -1451,7 +1460,7 @@ class CFGGenerator:
 			self.generateWhileStatement(statement, var_map)
 
 	def genMethod(self, class_name: str, method_def: MethodDefinintion):
-		mlabel = f"m{class_name}_{method_def.name()}"
+		mlabel = f"{method_def.name()}{class_name}"
 		this_param = IRVariable("this")
 		entry_block = BasicBlock(mlabel, [this_param])
 
@@ -1459,12 +1468,17 @@ class CFGGenerator:
 
 		local_vars = {}
 		for l in method_def.locals():
+			if l in local_vars:
+				raise Exception("Local variable already defined:", l.name())
 			temp = self.new_tmp()
 			local_vars[l] = temp
 			self._current_block.addStatement(IRAssignment(temp, IRConstant(0)))
 
 		var_map = {'this': this_param}
 		for arg in method_def.args():
+			if arg.name() in var_map:
+				raise Exception("Argument is already defined:", arg.name())
+
 			arg_temp = self.new_tmp()
 			var_map[arg.name()] = arg_temp
 
@@ -1474,8 +1488,6 @@ class CFGGenerator:
 
 		if not self._current_block.control():
 			self._current_block.setControlTransfer(IRReturn(IRConstant(0)))
-
-		self._program.addBlock(entry_block)
 
 	def genMainMethod(self, main_method: MainMethod):
 		main_block = BasicBlock("main")
@@ -1492,8 +1504,6 @@ class CFGGenerator:
 
 		if not self._current_block.control():
 			self._current_block.setControlTransfer(IRReturn(IRConstant(0)))
-
-		self._program.addBlock(main_block)
 
 	def convertAstToIr(self) -> IRProgram:
 		classes = []
