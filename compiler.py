@@ -3,6 +3,7 @@
 import argparse
 import sys
 import os
+from collections import defaultdict
 
 class TokenType:
 	#Fixed punctuation
@@ -802,11 +803,9 @@ class Parser:
 		while(self._tokenizer.peek() != TokenType.EOF):
 			open_token = self._tokenizer.peek()
 			if open_token == TokenType.CLASS:
-				print("Parsing Class!")
 				class_def = self.parseClass()
 				nodes.append(ASTNode(class_def, None))
 			elif open_token == TokenType.MAIN:
-				print("Parsing main")
 				main_def = self.parseMain()
 				nodes.append(ASTNode(None, main_def))
 			else:
@@ -818,14 +817,21 @@ class IRValue:
     pass
 
 class IRVariable(IRValue):
-    def __init__(self, name: str):
-        self._name = name
-        
-    def name(self) -> str:
-        return self._name
-    
-    def __str__(self) -> str:
-        return f"%{self._name}"
+	def __init__(self, name: str):
+		self._name = name
+		self._latest_version = 0
+  
+	def name(self) -> str:
+		return self._name
+
+	def latest_version(self) -> int:
+		return self._latest_version
+
+	def incVersion(self):
+		self._latest_version += 1
+  
+	def __str__(self) -> str:
+		return f"%{self._name}"
 
 class IRConstant(IRValue):
     def __init__(self, value: int):
@@ -920,7 +926,7 @@ class IRPhi(IRStatement):
     def __str__(self) -> str:
         prior_block_str = ", ".join(f"{label}, {var}" for label, var in self._prior_blocks)
         return f"	{self._name} = phi({prior_block_str})"
-    
+
 class IRAlloc(IRStatement):
     def __init__(self, name: IRVariable, size: int):
         self._name = name
@@ -1008,6 +1014,72 @@ class IRStore(IRStatement):
     
     def __str__(self) -> str:
         return f"	store({self._base}, {self._val})"
+
+class SSAVariable:
+	def __init__(self, base_name: str, version: int):
+		self._base_name = base_name
+		self._version = version
+		self._is_param = False
+		
+	def mark_as_param(self): #Mark as function parameter
+		self._is_param = True
+		
+	def name(self) -> str:
+		return self.__str__()
+    
+	def version(self) -> int:
+		return self._version
+
+	def __str__(self) -> str:
+		if self._is_param:
+			return f"%{self._base_name}"
+		# Regular SSA variables show version
+		if self._base_name:
+			return f"%{self._base_name}_{self._version}"
+		else:
+			return f"%{self._version}"
+
+	def __eq__(self, other):
+		return isinstance(other, SSAVariable) and self._base_name == other._base_name and self._version == other._version
+
+	def __hash__(self):
+		return hash((self._base_name, self._version))
+
+class SSAContext:
+	def __init__(self):
+		self._version_counters = defaultdict(int)
+		self._current_versions = {}
+        
+	def new_version(self, var_name: str) -> SSAVariable:
+		version = self._version_counters[var_name]
+		self._version_counters[var_name] += 1
+		ssa_var = SSAVariable(var_name, version)
+		self._current_versions[var_name] = version
+		return ssa_var
+    
+	def get_current(self, var_name: str) -> SSAVariable:
+		if var_name not in self._current_versions:
+			return self.new_version(var_name)
+		return self._current_versions[var_name]
+    
+	def set_current(self, var_name: str, ssa_var: SSAVariable):
+		self._current_versions[var_name] = ssa_var
+    
+	def version_counters(self) -> defaultdict[int]:
+		return self._version_counters
+
+	def current_versions(self) -> dict:
+		return self._current_versions
+
+	def copy(self):
+		new_ctx = SSAContext()
+		for k, v in self._version_counters.items():
+			new_ctx._version_counters[k] = v
+		new_ctx._current_versions = dict(self._current_versions)
+		return new_ctx
+
+	def get_all_variables(self):
+		return set(self._version_counters.keys())
 
 class IRControlTransfer:
     pass
@@ -1207,9 +1279,9 @@ class CFGGenerator:
 			field_map_name = f"fields{cname}"
 			self._program.addGlobal(GlobalArray(field_map_name, field_map_values))
 
-	def generateBinaryOp(self, exp: BinaryOp, var_map: dict[str, IRVariable]) -> IRValue:
-		lhs = self.generateExpression(exp.lhs(), var_map)
-		rhs = self.generateExpression(exp.rhs(), var_map)
+	def generateBinaryOp(self, exp: BinaryOp, ssa_ctx: SSAContext) -> IRValue:
+		lhs = self.generateExpression(exp.lhs(), ssa_ctx)
+		rhs = self.generateExpression(exp.rhs(), ssa_ctx)
   
 		left_check = self.new_tmp()
 		self._current_block.addStatement(IRBinaryOp(left_check, lhs, "&", IRConstant(1)))
@@ -1240,8 +1312,8 @@ class CFGGenerator:
 		self._program.addBlock(self._current_block)
 		return res
 
-	def generateFieldRead(self, exp: FieldRead, var_map: dict[str, IRVariable]):
-		obj_base = self.generateExpression(exp.base(), var_map)
+	def generateFieldRead(self, exp: FieldRead, ssa_ctx: SSAContext):
+		obj_base = self.generateExpression(exp.base(), ssa_ctx)
   
 		ptr_check = self.new_tmp()
 		self._current_block.addStatement(IRBinaryOp(ptr_check, obj_base, "&", 1))
@@ -1264,8 +1336,8 @@ class CFGGenerator:
 		self._program.addBlock(self._current_block)
 		return field_value
   
-	def generateMethodCall(self, exp: MethodCall, var_map: dict[str, IRVariable]):
-		receiver = self.generateExpression(exp.base(), var_map)
+	def generateMethodCall(self, exp: MethodCall, ssa_ctx):
+		receiver = self.generateExpression(exp.base(), ssa_ctx)
 
 		ptr_check = self.new_tmp()
 		self._current_block.addStatement(IRBinaryOp(ptr_check, receiver, "&", 1))
@@ -1288,7 +1360,7 @@ class CFGGenerator:
 
 		arg_vals = []
 		for arg_exp in exp.args():
-			arg_vals.append(self.generateExpression(arg_exp, var_map))
+			arg_vals.append(self.generateExpression(arg_exp, ssa_ctx))
 		res = self.new_tmp()
 		self._current_block.addStatement(IRCall(res, method_addr, receiver, arg_vals))
 		self._program.addBlock(self._current_block)
@@ -1315,33 +1387,29 @@ class CFGGenerator:
 		self._current_block.addStatement(IRStore(field_map_addr, field_map_global))
 		return obj_ptr
 
-	def generateExpression(self, exp: Expression, var_map: dict[str, IRVariable]):
+	def generateExpression(self, exp: Expression, ssa_ctx: SSAContext):
 		if type(exp) == Constant:
 			return IRConstant((exp.value() << 1) | 1)
 		elif type(exp) == Variable:
 			vname = exp.name()
-			if vname not in var_map:
-				raise Exception("Variable not defined:", vname)
-			return var_map[vname]
+			return ssa_ctx.get_current(vname)
 		elif type(exp) == ThisExpr:
-			if 'this' not in var_map:
-				Exception("'this' used outside of method context")
-			return var_map['this']
+			return ssa_ctx.get_current('this')
 		elif type(exp) == BinaryOp:
-			return self.generateBinaryOp(exp, var_map)
+			return self.generateBinaryOp(exp, ssa_ctx)
 		elif type(exp) == FieldRead:
-			return self.generateFieldRead(exp, var_map)
+			return self.generateFieldRead(exp, ssa_ctx)
 		elif type(exp) == MethodCall:
-			return self.generateMethodCall(exp, var_map)
+			return self.generateMethodCall(exp, ssa_ctx)
 		elif type(exp) == ClassRef:
 			return self.allocateClass(exp)
 		else:
 			raise Exception("Unexpected expression:", exp)
 
-	def generateFieldUpdate(self, field_update: FieldUpdate, var_map: dict[str, IRVariable]):
+	def generateFieldUpdate(self, field_update: FieldUpdate, ssa_ctx: SSAContext):
 		field_read = field_update.field_read()
-		obj = self.generateExpression(field_read.base(), var_map)
-		value = self.generateExpression(field_update.expression(), var_map)
+		obj = self.generateExpression(field_read.base(), ssa_ctx)
+		value = self.generateExpression(field_update.expression(), ssa_ctx)
 
 		ptr_check = self.new_tmp()
 		self._current_block.addStatement(IRBinaryOp(ptr_check, field_read, "&", IRConstant(1)))
@@ -1360,8 +1428,8 @@ class CFGGenerator:
 		self._current_block.addStatement(IRSetElt(obj, IRConstant(2), value))
 		self._program.addBlock(self._current_block)
 
-	def generateIfStatement(self, statement: IfStatement, var_map: dict[str, IRVariable]):
-		condition = self.generateExpression(statement.condition(), var_map)
+	def generateIfStatement(self, statement: IfStatement, ssa_ctx: SSAContext):
+		condition = self.generateExpression(statement.condition(), ssa_ctx)
 
 		then_label = self.new_label("then")
 		else_label = self.new_label("else")
@@ -1370,94 +1438,160 @@ class CFGGenerator:
 		self._current_block.setControlTransfer(IRConditional(condition, then_label, else_label))
 		self._program.addBlock(self._current_block)
 
+		pre_branch_ctx = ssa_ctx.copy()
+  
+		then_ctx = pre_branch_ctx.copy()
 		then_block = BasicBlock(then_label)
 		self._current_block = then_block
 		for s in statement.if_statements():
-			self.generateStatement(s, var_map)
+			self.generateStatement(s, then_ctx)
 		if not self._current_block.control():
 			self._current_block.setControlTransfer(IRJump(merge_label))
 		self._program.addBlock(self._current_block)
   
+		else_ctx = ssa_ctx.copy()
 		else_block = BasicBlock(else_label)
 		self._current_block = else_block
 		for s in statement.else_statements():
-			self.generateStatement(s, var_map)
+			self.generateStatement(s, else_ctx)
 		if not self._current_block.control():
 			self._current_block.setControlTransfer(IRJump(merge_label))
 		self._program.addBlock(self._current_block)
   
 		merge_block = BasicBlock(merge_label)
 		self._current_block = merge_block
+  
+		for var_name in (then_ctx.get_all_variables() | else_ctx.get_all_variables()):
+			max_version = max(
+       				then_ctx.version_counters().get(var_name, 0), 
+           			else_ctx.version_counters().get(var_name, 0)
+           	)
+			ssa_ctx.version_counters()[var_name] = max_version
+   
+		all_vars = (then_ctx.get_all_variables() | else_ctx.get_all_variables())
+		for var_name in all_vars:
+			then_var = then_ctx.get_current(var_name)
+			else_var = else_ctx.get_current(var_name)
+			pre_var = pre_branch_ctx.get_current(var_name)
+   
+			needs_phi = False
+			if pre_var is None:
+				needs_phi = True
+			elif then_var.version() != pre_var.version() or else_var.version() != pre_var.version():
+				needs_phi = True
+    
+			if needs_phi:
+				phi_res = ssa_ctx.new_version(var_name)
+				phi = IRPhi(phi_res, [(then_label, then_var), (else_label, else_var)])
+				self._current_block.addStatement(phi)
+			else:
+				ssa_ctx.set_current(var_name, then_var) #Var not modified/reassigned
 
-	def generateIfOnlyStatement(self, statement: IfOnlyStatement, var_map: dict[str, IRVariable]):
+	def generateIfOnlyStatement(self, statement: IfOnlyStatement, ssa_ctx: SSAContext):
 		condition = statement.condition()
 
 		then_label = self.new_label("then")
 		merge_label = self.new_label("merge")
   
+		current_label = self._current_block.name()
 		self._current_block.setControlTransfer(IRConditional(condition, then_label, merge_label))
+
+		pre_ctx = ssa_ctx.copy()
+		then_ctx = pre_ctx.copy()
 		then_block = BasicBlock(then_label)
 		self._current_block = then_block
 		for s in statement.statements():
-			self.generateStatement(s, var_map)
+			self.generateStatement(s, then_ctx)
 		if not self._current_block.control():
 			self._current_block.setControlTransfer(IRJump(merge_label))
 		self._program.addBlock(self._current_block)
 
 		merge_block = BasicBlock(merge_label)
 		self._current_block = merge_block
+  		
+		for var_name in (then_ctx.get_all_variables() | pre_ctx.get_all_variables()):
+			max_version = max(
+				then_ctx.version_counters().get(var_name, 0),
+				pre_ctx.version_counters().get(var_name, 0)
+			)
+			ssa_ctx.version_counters()[var_name] = max_version
+		
+		all_vars = then_ctx.get_all_variables() | pre_ctx.get_all_variables()
+		for var_name in all_vars:
+			then_var = then_ctx.get_current(var_name)
+			skip_var = pre_ctx.get_current(var_name)
+			
+			# Add phi if the variable was modified in the then branch
+			if then_var.version != skip_var.version:
+				phi_result = ssa_ctx.new_version(var_name)
+				phi = IRPhi(phi_result, [(then_label, then_var), (current_label, skip_var)])
+				self._current_block.addStatement(phi)
+			else:
+				# Variable wasn't modified, just propagate
+				ssa_ctx.set_current(var_name, then_var)
   
-	def generateWhileStatement(self, statement: WhileStatement, var_map: dict[str, IRVariable]):
+	def generateWhileStatement(self, statement: WhileStatement, ssa_ctx: SSAContext):
 		top_label = self.new_label("loop_top")
 		body_label = self.new_label("loop_body")
 		end_label = self.new_label("loop_end")
+		current_label = self._current_block.name()
   
 		self._current_block.setControlTransfer(IRJump(top_label))
 		self._program.addBlock(self._current_block)
+		pre_ctx = ssa_ctx.copy()
   
 		top_block = BasicBlock(top_label)
 		self._current_block = top_block
-		condition = self.generateExpression(statement.condition(), var_map) 
+  
+		loop_phi_vars = {}
+		for var_name in pre_ctx.get_all_variables():
+			phi_res = ssa_ctx.new_version(var_name)
+			loop_phi_vars[var_name] = phi_res
+   
+		condition = self.generateExpression(statement.condition(), ssa_ctx) 
 		self._current_block.addStatement(IRConditional(condition, body_label, end_label))
 		self._program.addBlock(self._current_block)
   
 		body_block = BasicBlock(body_label)
 		self._current_block = body_block
 		for s in statement.statements():
-			self.generateStatement(s, var_map)
+			self.generateStatement(s, ssa_ctx)
 		if not self._current_block.control():
 			self._current_block.setControlTransfer(IRJump(end_label))
 		self._program.addBlock(body_block)
 
+		for var_name, phi_res in loop_phi_vars.items():
+			entry_var = pre_ctx.get_current(var_name)
+			body_var = ssa_ctx.get_current(var_name)
+			if entry_var.version != body_var.version:
+				phi = IRPhi(phi_res, [(current_label, entry_var), (body_label, body_var)])
+				top_block._statements.insert(0, phi)
+    
 		end_block = BasicBlock(end_label)
 		self._current_block = end_block
 	
-	def generateStatement(self, statement: Statement, var_map: dict[str, IRVariable]) -> IRStatement:
+	def generateStatement(self, statement: Statement, ssa_ctx: SSAContext) -> IRStatement:
 		if type(statement) == Assignment:
 			name = statement.variable().name()
-			res = self.generateExpression(statement.expression(), var_map)
-
-			if name not in var_map:
-				var_map[name] = self.new_tmp()
-			
-			self._current_block.addStatement(IRAssignment(var_map[name], res))
-		
+			res = self.generateExpression(statement.expression(), ssa_ctx)
+			new_var = ssa_ctx.new_version(name)
+			self._current_block.addStatement(IRAssignment(new_var, res))
 		elif type(statement) == UnderscoreAssignment:
-			self.generateExpression(statement.expression(), var_map)
+			self.generateExpression(statement.expression(), ssa_ctx)
 		elif type(statement) == FieldUpdate:
-			self.generateFieldUpdate(statement, var_map)
+			self.generateFieldUpdate(statement, ssa_ctx)
 		elif type(statement) == PrintStatement:
-			res = self.generateExpression(statement.expression(), var_map)
+			res = self.generateExpression(statement.expression(), ssa_ctx)
 			self._current_block.addStatement(IRPrint(res))
 		elif type(statement) == ReturnStatement:
-			res = self.generateExpression(statement.expression(), var_map)
+			res = self.generateExpression(statement.expression(), ssa_ctx)
 			self._current_block.setControlTransfer(IRReturn(res))
 		elif type(statement) == IfStatement:
-			self.generateIfStatement(statement, var_map)
+			self.generateIfStatement(statement, ssa_ctx)
 		elif type(statement) == IfOnlyStatement:
-			self.generateIfOnlyStatement(statement, var_map)
+			self.generateIfOnlyStatement(statement, ssa_ctx)
 		elif type(statement) == WhileStatement:
-			self.generateWhileStatement(statement, var_map)
+			self.generateWhileStatement(statement, ssa_ctx)
 
 	def genMethod(self, class_name: str, method_def: MethodDefinintion):
 		mlabel = f"{method_def.name()}{class_name}"
@@ -1465,45 +1599,46 @@ class CFGGenerator:
 		entry_block = BasicBlock(mlabel, [this_param])
 
 		self._current_block = entry_block
+		ssa_ctx = SSAContext()
+		this_ssa = ssa_ctx.new_version("this")
+		this_ssa.mark_as_param()
+		self._current_block.addStatement(IRAssignment(this_ssa, this_param))
 
-		local_vars = {}
-		for l in method_def.locals():
-			if l in local_vars:
-				raise Exception("Local variable already defined:", l.name())
-			temp = self.new_tmp()
-			local_vars[l] = temp
-			self._current_block.addStatement(IRAssignment(temp, IRConstant(0)))
-
-		var_map = {'this': this_param}
 		for arg in method_def.args():
-			if arg.name() in var_map:
-				raise Exception("Argument is already defined:", arg.name())
+			arg_name = arg.name()
+			arg_ssa = ssa_ctx.new_version(arg_name)
+		
+		for l in method_def.locals():
+			local_name = l.name() if hasattr(l, 'name') else str(l)
+			local_ssa = ssa_ctx.new_version(local_name)
+			self._current_block.addStatement(IRAssignment(local_ssa, IRConstant(0)))
 
-			arg_temp = self.new_tmp()
-			var_map[arg.name()] = arg_temp
-
-		var_map.update(local_vars)
 		for stmt in method_def.statements():
-			self.generateStatement(stmt, var_map)
+			self.generateStatement(stmt, ssa_ctx)
 
 		if not self._current_block.control():
 			self._current_block.setControlTransfer(IRReturn(IRConstant(0)))
-
+		
+		self._program.addBlock(self._current_block)
+		
 	def genMainMethod(self, main_method: MainMethod):
 		main_block = BasicBlock("main")
 		self._current_block = main_block
 
-		var_map = {}
+		ssa_ctx = SSAContext()
+		
 		for l in main_method.vars():
-			temp = self.new_tmp()
-			var_map[l] = temp
-			self._current_block.addStatement(IRAssignment(temp, IRConstant(0)))
+			local_name = l.name() if hasattr(l, 'name') else str(l)
+			local_ssa = ssa_ctx.new_version(local_name)
+			self._current_block.addStatement(IRAssignment(local_ssa, IRConstant(0)))
 
 		for stmt in main_method.statements():
-			self.generateStatement(stmt, var_map)
+			self.generateStatement(stmt, ssa_ctx)
 
 		if not self._current_block.control():
 			self._current_block.setControlTransfer(IRReturn(IRConstant(0)))
+		
+		self._program.addBlock(self._current_block)
 
 	def convertAstToIr(self) -> IRProgram:
 		classes = []
@@ -1564,8 +1699,8 @@ if __name__ == "__main__":
 	elif sys.argv[1] == "parseFile":
 		parser = Parser(Tokenizer(str_text))
 		ast_nodes = parser.parseFile()
-		for node in ast_nodes:
-			print(node)
+		# for node in ast_nodes:
+		# 	print(node)
    
 		cfg_generator = CFGGenerator(ast_nodes)
 		print(cfg_generator.convertAstToIr())
