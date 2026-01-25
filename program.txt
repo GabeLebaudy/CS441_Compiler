@@ -12,4 +12,5 @@ class example [
 
 main with x:
 	x = @example
+	!x.temp = 3
 	print(^x.ifStatement(0, 3))

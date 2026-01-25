@@ -1134,7 +1134,7 @@ class IRProgram:
 		for g in self._globals:
 			result += str(g) + "\n"
 
-		result += "\ncode:\n"
+		result += "code:\n"
 		for b in self._blocks:
 			result += "\n" + str(b)
 
@@ -1147,6 +1147,7 @@ class CFGGenerator:
 		self._temp_counter = 1
 		self._label_counter = 1
 		self._current_block = None
+		self._current_class = None
 
 		self._class_info = {}
 		self._field_ids = {}
@@ -1299,7 +1300,6 @@ class CFGGenerator:
 			arg_vals.append(self.generateExpression(arg_exp, var_map))
 		res = self.new_tmp()
 		self._current_block.addStatement(IRCall(res, method_addr, receiver, arg_vals))
-		self._program.addBlock(self._current_block)
 		return res
 
 	def allocateClass(self, exp: ClassRef):
@@ -1353,9 +1353,9 @@ class CFGGenerator:
 		value = self.generateExpression(field_update.expression(), var_map)
 
 		ptr_check = self.new_tmp()
-		self._current_block.addStatement(IRBinaryOp(ptr_check, field_read, "&", IRConstant(1)))
+		self._current_block.addStatement(IRBinaryOp(ptr_check, obj, "&", IRConstant(1)))
   
-		ok_ptr_label = self.new_label("ok_poiter")
+		ok_ptr_label = self.new_label("ok_pointer")
 		fail_label = self.new_label("not_a_pointer")
 		fail_block = BasicBlock(fail_label)
 		fail_block.setControlTransfer(IRFail("Not a Pointer"))
@@ -1366,8 +1366,30 @@ class CFGGenerator:
   
 		ok_ptr_block = BasicBlock(ok_ptr_label)
 		self._current_block = ok_ptr_block
-		self._current_block.addStatement(IRSetElt(obj, IRConstant(2), value))
+
+		field_name = field_read.field_name()
+		field_id = self._field_ids.get((self._current_class, field_name), None)
+		if field_id is None:
+			raise Exception("Invalid field name:", field_name)
+		
+		addr_tmp = self.new_tmp()
+		self._current_block.addStatement(IRBinaryOp(addr_tmp, obj, "+", IRConstant(8)))
+		load_tmp = self.new_tmp()
+		self._current_block.addStatement(IRLoad(load_tmp, addr_tmp))
+		field_lookup = self.new_tmp()
+		self._current_block.addStatement(IRGelElt(field_lookup, load_tmp, IRConstant(field_id)))
+		
+		store_works_label = self.new_label("store_works")
+		bad_field_label = self.new_label("bad_field")
+		bad_field_block = BasicBlock(bad_field_label)
+		bad_field_block.addStatement(IRFail("NoSuchField"))
+		self._current_block.setControlTransfer(IRConditional(field_lookup, store_works_label, bad_field_label))
 		self._program.addBlock(self._current_block)
+		self._program.addBlock(bad_field_block)
+
+		store_works_block = BasicBlock(store_works_label)
+		self._current_block = store_works_block
+		self._current_block.addStatement(IRSetElt(obj, field_lookup, value))
 
 	def generateIfStatement(self, statement: IfStatement, var_map: dict[str, IRVariable]):
 		condition = self.generateExpression(statement.condition(), var_map)
@@ -1491,7 +1513,7 @@ class CFGGenerator:
 		if not self._current_block.control():
 			self._current_block.setControlTransfer(IRReturn(IRConstant(0)))
 		
-		self._program.addBlock(self._current_block) #Come back to this
+		self._program.addBlock(self._current_block)
 		
 	def genMainMethod(self, main_method: MainMethod):
 		main_block = BasicBlock("main")
@@ -1525,6 +1547,7 @@ class CFGGenerator:
 		self.genVtables(classes)
   
 		for cls in classes:
+			self._current_class = cls.name()
 			for m in cls.methods():
 				self.genMethod(cls.name(), m)
 	
