@@ -431,11 +431,11 @@ class MethodDefinintion:
 		return self._statements
 
 	def __str__(self) -> str:
-		arguments = " ".join(str(arg) for arg in self._args)
+		params = " ".join(str(p) for p in self._params)
 		local_vars = " ".join(str(local) for local in self._locals)
 		statements = "\n".join(str(statement) for statement in self._statements)
 		return (
-				f"Method Definition: Name={self._name} [Arguments={arguments}, "
+				f"Method Definition: Name={self._name} [Arguments={params}, "
       			f"Local Variables={local_vars}, "
       			f"Statements={statements}]"
 		)
@@ -521,7 +521,7 @@ class Parser:
 			optok = self._tokenizer.next()
 			if type(optok) != Operator:
 				raise Exception("Expected operator token but found", optok)
-
+			
 			rhs = self.parseExpr()
 			closetok = self._tokenizer.next() 
 			if closetok != TokenType.RIGHT_PAREN:
@@ -1229,11 +1229,23 @@ class CFGGenerator:
 		self._current_block.setControlTransfer(IRConditional(right_check, ok_right_label, fail_label))
 		self._program.addBlock(self._current_block)
   
-		res = self.new_tmp()
-		op_str = exp.op().op()
+		ok_right_block = BasicBlock(ok_right_label)
+		self._current_block = ok_right_block
 
-		self._current_block.addStatement(IRBinaryOp(res, lhs, op_str, rhs))
-		self._program.addBlock(self._current_block)
+		op_str = exp.op().op()
+		res = self.new_tmp()
+		if type(lhs) == IRConstant:
+			lhs = IRConstant(lhs.value() >> 1)
+		if type(rhs) == IRConstant:
+			rhs = IRConstant(rhs.value() >> 1)
+
+		if op_str == ">":
+			self._current_block.addStatement(IRBinaryOp(res, lhs, "-", rhs))
+		elif op_str == "<":
+			self._current_block.addStatement(IRBinaryOp(res, rhs, "-", lhs))
+		else:
+			self._current_block.addStatement(IRBinaryOp(res, lhs, op_str, rhs))
+		
 		return res
 
 	def generateFieldRead(self, exp: FieldRead, var_map: dict[str, IRVariable]):
@@ -1392,7 +1404,6 @@ class CFGGenerator:
 		then_label = self.new_label("then")
 		merge_label = self.new_label("merge")
   
-		current_label = self._current_block.name()
 		self._current_block.setControlTransfer(IRConditional(condition, then_label, merge_label))
 		then_block = BasicBlock(then_label)
 		self._current_block = then_block
@@ -1538,6 +1549,7 @@ class SSAVariable:
 	def __str__(self) -> str:
 		if self._is_param:
 			return f"%{self._base_name}"
+		
 		# Regular SSA variables show version
 		if self._base_name:
 			return f"%{self._base_name}_{self._version}"

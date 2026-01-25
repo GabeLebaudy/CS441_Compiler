@@ -8,9 +8,6 @@ class example [
 			c = b
 		}
 		return c
-
-	method getTemp() with locals:
-		return &this.temp
 ]
 
 main with x:
