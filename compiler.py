@@ -1236,8 +1236,8 @@ class CFGGenerator:
 		self._program.addBlock(self._current_block)
 		return res
 
-	def generateFieldRead(self, exp: FieldRead, ssa_ctx: SSAContext):
-		obj_base = self.generateExpression(exp.base(), ssa_ctx)
+	def generateFieldRead(self, exp: FieldRead, var_map: dict[str, IRVariable]):
+		obj_base = self.generateExpression(exp.base(), var_map)
   
 		ptr_check = self.new_tmp()
 		self._current_block.addStatement(IRBinaryOp(ptr_check, obj_base, "&", 1))
@@ -1260,8 +1260,8 @@ class CFGGenerator:
 		self._program.addBlock(self._current_block)
 		return field_value
   
-	def generateMethodCall(self, exp: MethodCall, ssa_ctx):
-		receiver = self.generateExpression(exp.base(), ssa_ctx)
+	def generateMethodCall(self, exp: MethodCall, var_map: dict[str, IRVariable]):
+		receiver = self.generateExpression(exp.base(), var_map)
 
 		ptr_check = self.new_tmp()
 		self._current_block.addStatement(IRBinaryOp(ptr_check, receiver, "&", 1))
@@ -1284,7 +1284,7 @@ class CFGGenerator:
 
 		arg_vals = []
 		for arg_exp in exp.args():
-			arg_vals.append(self.generateExpression(arg_exp, ssa_ctx))
+			arg_vals.append(self.generateExpression(arg_exp, var_map))
 		res = self.new_tmp()
 		self._current_block.addStatement(IRCall(res, method_addr, receiver, arg_vals))
 		self._program.addBlock(self._current_block)
@@ -1486,15 +1486,14 @@ class CFGGenerator:
 		main_block = BasicBlock("main")
 		self._current_block = main_block
 
-		ssa_ctx = SSAContext()
-		
+		var_map = {}
 		for l in main_method.vars():
-			local_name = l.name() if hasattr(l, 'name') else str(l)
-			local_ssa = ssa_ctx.new_version(local_name)
-			self._current_block.addStatement(IRAssignment(local_ssa, IRConstant(0)))
-
+			if var_map.get(l.name()):
+				raise Exception("Variable already defined:", l.name())
+			var_map[l.name()] = IRVariable(l.name())
+   
 		for stmt in main_method.statements():
-			self.generateStatement(stmt, ssa_ctx)
+			self.generateStatement(stmt, var_map)
 
 		if not self._current_block.control():
 			self._current_block.setControlTransfer(IRReturn(IRConstant(0)))
