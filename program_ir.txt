@@ -1,0 +1,73 @@
+data:
+global array @vtblexample: { exampleifStatement }
+global array @fieldsexample: { 1, 2 }
+code:
+
+ifStatementexample(%this, %a, %b):
+	%1 = %a & 1
+	if %1, then ok_left1 else not_a_number2
+
+not_a_number2:
+	fail NotANumber
+
+ok_left1:
+	%2 = 11 & 1
+	if %2, then ok_right4 else not_a_number3
+
+not_a_number3:
+	fail NotANumber
+
+ok_right4:
+	%3 = %a - 5
+	if %3, then then5 else else6
+
+then5:
+	%c1 = %a
+	jump merge7
+
+else6:
+	%c2 = %b
+	jump merge7
+
+merge7:
+	%c0 = phi(then5, %c1, else6, %c2)
+	%b0 = phi(then5, %b, else6, %b)
+	%a0 = phi(then5, %a, else6, %a)
+	ret %c0
+
+main:
+	%4 = alloc(3)
+	store(%4, @vtblexample)
+	%5 = %4 + 8
+	store(%5, @fieldsexample)
+	%x0 = %4
+	%6 = %x & 1
+	if %6, then not_a_pointer9 else ok_pointer8
+
+not_a_pointer9:
+	fail NotAPointer
+
+ok_pointer8:
+	%7 = %x + 8
+	%8 = load(%7)
+	%9 = getelt(%8, 0)
+	if %9, then store_works10 else bad_field11
+
+bad_field11:
+	fail NoSuchField
+
+store_works10:
+	setelt(%x, %9, 7)
+	%10 = %x & 1
+	if %10, then not_a_pointer13 else ok_pointer_call12
+
+not_a_pointer13:
+	fail NotAPointer
+
+ok_pointer_call12:
+	%11 = load(%x)
+	%12 = getelt(%11, 0)
+	%13 = call(%12, %x, 1, 7)
+	print(%13)
+	ret 0
+

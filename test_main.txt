@@ -7,7 +7,7 @@ class A [
 class B [
     fields y
     method m() with locals:
-      return 0
+      return 1
 
     method oneArg(a) with locals b:
       b = (a * a)

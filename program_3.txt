@@ -1,0 +1,20 @@
+class A [
+	fields x, y, z
+	method m(a, b, c) with locals:
+		ifonly((a + b) > c): {
+			return (&this.x + &this.y)
+		}
+		return &this.z
+
+	method q() with locals:
+		return &this.y
+]
+
+main with x:
+	x = @A
+	!x.x = 1
+	!x.y = 2
+	!x.z = 4
+	print(^x.m(3, 4, 6))
+	print(^x.m(1, 2, 4))
+	print(^x.q())
