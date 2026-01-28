@@ -805,7 +805,6 @@ class Parser:
 				raise Exception("Unknown starting token:", open_token)
 		return nodes
 
-#Base class (Might come in handy later)
 class IRValue:
     pass
 
@@ -1481,7 +1480,7 @@ class CFGGenerator:
 		obj_size = 2 + num_fields
   
 		obj_ptr = self.new_tmp()
-		self._current_block.addStatement(IRAlloc(obj_ptr, obj_size)) #Change to IR Constant?
+		self._current_block.addStatement(IRAlloc(obj_ptr, obj_size))
 
 		vtable_global = IRGlobal(f"vtbl{cname}")
 		self._current_block.addStatement(IRStore(obj_ptr, vtable_global))
@@ -1942,7 +1941,6 @@ class Optimizer:
 			if f.blocks():
 				worklist.append(f.blocks()[0].name())
 			
-			# Process blocks in worklist order
 			while worklist:
 				block_name = worklist.pop(0)
 				if block_name in processed:
@@ -1952,24 +1950,19 @@ class Optimizer:
 				if block_id is None:
 					continue
 					
-				block = f.blocks()[block_id]
-				
-				# Initialize current_versions based on predecessors
+				block = f.blocks()[block_id]				
 				pred_list = prio_blocks[block_name]
 				initial_versions = {}
 				
 				if len(pred_list) == 1:
-					# Single predecessor - inherit its versions
 					pred_name = pred_list[0]
 					if pred_name in block_last_versions:
 						initial_versions = block_last_versions[pred_name].copy()
-				# For multiple predecessors, phi nodes handle it, start empty
 				
 				last_versions = self.replaceWithSSA(block, ssa_vars, initial_versions)
 				block_last_versions[block.name()] = last_versions
 				processed.add(block_name)
 				
-				# Add successors to worklist
 				successors = block.getControlLabels()
 				if successors:
 					for succ in successors:
@@ -2022,48 +2015,37 @@ class Optimizer:
 		return self._ir_program
     
 if __name__ == "__main__":
-	if len(sys.argv) < 3:
-		print("Usage: comp {tokenize|parseExpr|parseStatement|parseClass|parseFile} file")
-		sys.exit(1)
-  
+	parser = argparse.ArgumentParser()
+	parser.add_argument("-printCFG", dest="printCfg", action="store_true", help="print the AST Nodes after parsing")
+	parser.add_argument("-noSSA", dest="noSSA", action="store_true", help="Don't run SSA")
+	parser.add_argument("-noopt", dest="noOpt", action="store_true", help="Don't optimize output")
+	parser.add_argument("filename", help="input file to compile")
+	args = parser.parse_args()
+
 	str_text = ""
-	if not os.path.exists(sys.argv[2]):
-		raise Exception(f"Error, file: {sys.argv[2]} does not exist")
-	
-	with open(sys.argv[2], 'r') as f:
+	if not args.filename:
+		raise Exception("File to compile required")
+
+	if not os.path.exists(args.filename):
+		raise Exception(f"Error, file: {args.filename} does not exist")
+
+	with open(args.filename, 'r') as f:
 		str_text = "".join(f.readlines())
-	
-	if sys.argv[1] == "tokenize":
-		tokenizer = Tokenizer(str_text)
-		token = None
-		while(tokenizer.peek() != TokenType.EOF):
-			token = tokenizer.next()
-			printToken(token)
-    
-	elif sys.argv[1] == "parseExpr":
-		parser = Parser(Tokenizer(str_text))
-		print(parser.parseExpr())
-	elif sys.argv[1] == "parseStatement":
-		parser = Parser(Tokenizer(str_text))
-		print(parser.parseStatement())
-	elif sys.argv[1] == "parseClass":
-		parser = Parser(Tokenizer(str_text))
-		print(parser.parseClass())
-	elif sys.argv[1] == "parseMain":
-		parser = Parser(Tokenizer(str_text))
-		print(parser.parseMain())
-	elif sys.argv[1] == "parseFile":
-		parser = Parser(Tokenizer(str_text))
-		ast_nodes = parser.parseFile()
-		# for node in ast_nodes:
-		# 	print(node)
-   
-		cfg_generator = CFGGenerator(ast_nodes)
-		program = cfg_generator.convertAstToIr()
-		optimizer = Optimizer(program)
+
+	file_parser = Parser(Tokenizer(str_text))
+	ast_nodes = file_parser.parseFile()
+	if args.printCfg:
+		for node in ast_nodes:
+			print(node)
+
+	cfg_generator = CFGGenerator(ast_nodes)
+	program = cfg_generator.convertAstToIr()
+	optimizer = Optimizer(program)
+	if not args.noSSA:
 		optimizer.convertToSSA()
+
+	if not args.noOpt:
 		optimizer.removeConstantArithmetic()
-		print(optimizer.getProgram())
-	else:
-		raise Exception("Invalid usage")
+	print(optimizer.getProgram())
+
   
