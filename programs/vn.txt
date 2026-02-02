@@ -1,0 +1,9 @@
+class Foo [
+    fields
+    method doStuff(x,y,z) with locals r, q:
+        r = (x + x)
+		q = ((x + x) + x)
+		print(r)
+		return q
+]
+main with:

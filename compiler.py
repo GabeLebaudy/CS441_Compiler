@@ -28,12 +28,11 @@ if __name__ == "__main__":
 		for node in ast_nodes:
 			print(node)
 
-	cfg_generator = CFGGenerator(ast_nodes)
-	program = cfg_generator.convertAstToIr()
+	cfg_generator = CFGGenerator(ast_nodes, args)
+	program = cfg_generator.convertAstToIr() #Pass in constant arithmetic optimizer flag (needs to be done in here)
 	optimizer = Optimizer(program)
-	if not args.noSSA:
-		optimizer.convertToSSA()
-
-	if not args.noOpt:
-		optimizer.removeConstantArithmetic()
+	# if not args.noSSA:
+	# 	optimizer.convertToSSA()
+	optimizer.getOptimizedSSA()
+	optimizer.applyValueNumbering()
 	print(optimizer.getProgram())

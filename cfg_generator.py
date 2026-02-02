@@ -2,7 +2,7 @@ from ast_components import *
 from ir_components import *
 
 class CFGGenerator:
-	def __init__(self, ast_nodes: list[ASTNode]):
+	def __init__(self, ast_nodes: list[ASTNode], opts):
 		self._ast_nodes = ast_nodes
 		self._program = IRProgram()
 		self._temp_counter = 1
@@ -15,6 +15,8 @@ class CFGGenerator:
 		self._class_info = {}
 		self._field_ids = {}
 		self._method_ids = {}
+
+		self._opts = opts
   
 	def new_tmp(self) -> IRVariable:
 		temp = IRVariable(str(self._temp_counter))
@@ -103,18 +105,33 @@ class CFGGenerator:
 		if op_str == "<" or op_str == ">":
 			self._current_block.addStatement(IRBinaryOp(res, lhs, op_str, rhs))
 		else:
-			lhs_untagged = self.new_tmp()
-			self._current_block.addStatement(IRBinaryOp(lhs_untagged, lhs, ">>", IRConstant(1)))
-   
-			rhs_untagged = self.new_tmp()
-			self._current_block.addStatement(IRBinaryOp(rhs_untagged, rhs, ">>", IRConstant(1)))
-			
-			result_untagged = self.new_tmp()
-			self._current_block.addStatement(IRBinaryOp(result_untagged, lhs_untagged, op_str, rhs_untagged))
-			
-			result_shifted = self.new_tmp()
-			self._current_block.addStatement(IRBinaryOp(result_shifted, result_untagged, "<<", IRConstant(1)))
-			self._current_block.addStatement(IRBinaryOp(res, result_shifted, "|", IRConstant(1)))
+			if not self._opts.noOpt and type(lhs) == IRConstant and type(rhs) == IRConstant:
+				lhs_val = lhs.value() >> 1
+				rhs_val = rhs.value() >> 1
+				if op_str == "+":
+					res_val = lhs_val + rhs_val
+				elif op_str == "-":
+					res_val = lhs_val + rhs_val
+				elif op_str == "*":
+					res_val = lhs_val * rhs_val
+				else:
+					res_val = lhs_val // rhs_val
+				
+				res_val = (res_val << 1) | 1
+				self._current_block.addStatement(IRAssignment(res, IRConstant(res_val)))
+			else:
+				lhs_untagged = self.new_tmp()
+				self._current_block.addStatement(IRBinaryOp(lhs_untagged, lhs, ">>", IRConstant(1)))
+	
+				rhs_untagged = self.new_tmp()
+				self._current_block.addStatement(IRBinaryOp(rhs_untagged, rhs, ">>", IRConstant(1)))
+				
+				result_untagged = self.new_tmp()
+				self._current_block.addStatement(IRBinaryOp(result_untagged, lhs_untagged, op_str, rhs_untagged))
+				
+				result_shifted = self.new_tmp()
+				self._current_block.addStatement(IRBinaryOp(result_shifted, result_untagged, "<<", IRConstant(1)))
+				self._current_block.addStatement(IRBinaryOp(res, result_shifted, "|", IRConstant(1)))
 
 		return res
 
@@ -178,7 +195,6 @@ class CFGGenerator:
 		
 		field_value = self.new_tmp()
 		self._current_block.addStatement(IRGelElt(field_value, obj_base, field_offset))
-		self._current_function.addBlock(self._current_block)
 		return field_value
   
 	def generateMethodCall(self, exp: MethodCall, var_map: dict[str, IRVariable]):
@@ -422,10 +438,6 @@ class CFGGenerator:
 			untagged = self.new_tmp()
 			self._current_block.addStatement(IRBinaryOp(untagged, res, ">>", IRConstant(1)))
 			self._current_block.addStatement(IRPrint(untagged))
-			retagged_res = self.new_tmp()
-			self._current_block.addStatement(IRBinaryOp(retagged_res, untagged, "<<", IRConstant(1)))
-			retagged = self.new_tmp()
-			self._current_block.addStatement(IRBinaryOp(retagged, retagged_res, "|", IRConstant(1)))
 		elif type(statement) == ReturnStatement:
 			res = self.generateExpression(statement.expression(), var_map)
 			self._current_block.setControlTransfer(IRReturn(res))

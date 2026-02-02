@@ -4,6 +4,7 @@ class IRValue:
 class IRVariable(IRValue):
 	def __init__(self, name: str):
 		self._name = name
+		self._current_version = None
   
 	def name(self) -> str:
 		return self._name
@@ -11,8 +12,17 @@ class IRVariable(IRValue):
 	def isTemp(self) -> bool:
 		return self._name.isdigit() or self._name == "this"
 
+	def incVersion(self):
+		if self._current_version:
+			self._current_version += 1
+		else:
+			self._current_version = 0
+   
 	def __str__(self) -> str:
+		if self._current_version:
+			return f"%{self._name}{self._current_version}"
 		return f"%{self._name}"
+		
 
 class IRConstant(IRValue):
     def __init__(self, value: int):
@@ -91,36 +101,39 @@ class IRBinaryOp(IRStatement):
 		return f"  {self._name} = {self._lhs} {self._op} {self._rhs}"
 
 class IRCall(IRStatement):
-    def __init__(self, name: IRVariable, code_addr: IRVariable, receiver: IRVariable, args: list[IRValue]):
-        self._name = name
-        self._code_addr = code_addr
-        self._receiver = receiver
-        self._args = args
-        
-    def name(self) -> IRVariable:
-        return self._name
-    
-    def code_addr(self) -> IRVariable:
-        return self._code_addr
-    
-    def replaceCodeAddr(self, value: IRValue):
-        self._code_addr = value
-        
-    def replaceReceiver(self, value: IRValue):
-        self._receiver = value
-        
-    def replaceArg(self, value: IRValue, ind: int):
-        self._args[ind] = value
-         
-    def receiver(self) -> IRVariable:
-        return self._receiver
-    
-    def args(self) -> list[IRValue]:
-        return self._args
-    
-    def __str__(self) -> str:
-        args_str = ", " + ", ".join(str(a) for a in self._args)
-        return f"  {self._name} = call({self._code_addr}, {self._receiver}{args_str})"
+	def __init__(self, name: IRVariable, code_addr: IRVariable, receiver: IRVariable, args: list[IRValue]):
+		self._name = name
+		self._code_addr = code_addr
+		self._receiver = receiver
+		self._args = args
+		
+	def name(self) -> IRVariable:
+		return self._name
+
+	def replaceName(self, var: IRVariable):
+		self._name = var
+
+	def code_addr(self) -> IRVariable:
+		return self._code_addr
+
+	def replaceCodeAddr(self, value: IRValue):
+		self._code_addr = value
+		
+	def replaceReceiver(self, value: IRValue):
+		self._receiver = value
+		
+	def replaceArg(self, value: IRValue, ind: int):
+		self._args[ind] = value
+			
+	def receiver(self) -> IRVariable:
+		return self._receiver
+
+	def args(self) -> list[IRValue]:
+		return self._args
+
+	def __str__(self) -> str:
+		args_str = ", " + ", ".join(str(a) for a in self._args)
+		return f"  {self._name} = call({self._code_addr}, {self._receiver}{args_str})"
 
 class IRPhi(IRStatement):
     def __init__(self, name: IRVariable, prior_blocks: list[tuple[str, IRVariable]]):
@@ -216,21 +229,24 @@ class IRSetElt(IRStatement):
         return f"  setelt({self._arr_pointer}, {self._ind}, {self._val})"
     
 class IRLoad(IRStatement):
-    def __init__(self, name: IRVariable, base: IRVariable):
-        self._name = name
-        self._base = base
-        
-    def name(self) -> IRVariable:
-        return self._name
-    
-    def base(self) -> IRVariable:
-        return self._base
-    
-    def replaceBase(self, value: IRValue):
-        self._base = value
-        
-    def __str__(self) -> str:
-        return f"  {self._name} = load({self._base})"
+	def __init__(self, name: IRVariable, base: IRVariable):
+		self._name = name
+		self._base = base
+		
+	def name(self) -> IRVariable:
+		return self._name
+
+	def replaceName(self, val: IRVariable):
+		self._name = val
+
+	def base(self) -> IRVariable:
+		return self._base
+
+	def replaceBase(self, value: IRValue):
+		self._base = value
+		
+	def __str__(self) -> str:
+		return f"  {self._name} = load({self._base})"
 
 class IRStore(IRStatement):
     def __init__(self, base: IRVariable, val: IRValue):
@@ -330,6 +346,9 @@ class BasicBlock:
 
 	def addStatement(self, statement: IRStatement):
 		self._statements.append(statement)
+	
+	def replaceStatement(self, ind: int, new_statement: IRStatement):
+		self._statements[ind] = new_statement
   
 	def setControlTransfer(self, control_transfer: IRControlTransfer):
 		self._control = control_transfer
@@ -345,6 +364,13 @@ class BasicBlock:
 		else:
 			return []
 	
+	def hasPhi(self, variable: IRVariable):
+		for s in self._statements:
+			if type(s) == IRPhi:
+				if s.name().name() == variable.name():
+					return True
+		return False
+
 	def insertPhi(self, phi_statement: IRPhi):
 		self._statements.insert(0, phi_statement)
   
