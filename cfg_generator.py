@@ -105,7 +105,7 @@ class CFGGenerator:
 		if op_str == "<" or op_str == ">":
 			self._current_block.addStatement(IRBinaryOp(res, lhs, op_str, rhs))
 		else:
-			if not self._opts.noOpt and type(lhs) == IRConstant and type(rhs) == IRConstant:
+			if self._opts.const_arith and type(lhs) == IRConstant and type(rhs) == IRConstant:
 				lhs_val = lhs.value() >> 1
 				rhs_val = rhs.value() >> 1
 				if op_str == "+":

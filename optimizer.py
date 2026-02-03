@@ -391,10 +391,9 @@ class Optimizer:
 						worklist.add(df_block)
 
 	def renameVariables(self, function: IRFunction):
-		counters = {}  # var_name => next version number
-		stacks = {}    # var_name => stack of current versions
+		counters = {}  # var_name(str) => next version number(int)
+		stacks = {}    # var_name(str) => stack of current versions (int)
 		
-		# Initialize for all variables that appear in the function
 		for block in function.blocks():
 			for statement in block.statements():
 				if type(statement) == IRPhi:
@@ -409,49 +408,42 @@ class Optimizer:
 							counters[var_name] = 0
 							stacks[var_name] = []
 		
-		# Build dominator tree children mapping
 		idom = self._immediate_dominator_table[function.name()]
-		dom_children = {}  # block_id => list of child block_ids
+		dom_children = {} 
 		for block_id in range(len(function.blocks())):
 			dom_children[block_id] = []
 		
 		for child_id, parent_id in idom.items():
 			dom_children[parent_id].append(child_id)
 		
-		# Start renaming from entry block (block 0) using iterative approach with stack
-		# Stack contains: (block_id, phase) where phase is 'process' or 'cleanup'
+		#Bit of a weird structure of doing this, but chose this design because this algorithm is recursive in nature, and python
+		#does not handle recursion well (I think 64 recursive calls before exception) so found a way to do so in a looping structure
 		work_stack = [(0, 'process', [])]
-		
 		while work_stack:
 			block_id, phase, pushed = work_stack.pop()
 			
-			if phase == 'cleanup':
-				# Pop all versions we pushed
+			if phase == 'cleanup': #Could have done 0/1 or even T/F, but this adds clarity
 				for var_name in pushed:
 					stacks[var_name].pop()
 				continue
 			
-			# phase == 'process'
 			block = function.blocks()[block_id]
-			pushed = []  # Track what we pushed for cleanup
+			pushed = []  #Track what we pushed for cleanup
 			
-			# Process phi functions first
 			for statement in block.statements():
 				if type(statement) != IRPhi:
-					break  # Phis are at the beginning
+					break #Phis always at the top
 				
 				var_name = statement.name().name()
 				i = counters[var_name]
 				counters[var_name] += 1
 				
-				# Rename the phi result
 				new_var = IRVariable(f"{var_name}{i}")
 				statement._name = new_var
 				
 				stacks[var_name].append(i)
 				pushed.append(var_name)
 			
-			# Process regular statements
 			for statement in block.statements():
 				if type(statement) == IRPhi:
 					continue
@@ -470,25 +462,22 @@ class Optimizer:
 							version = stacks[rhs_name][-1]
 							statement.replaceRhs(IRVariable(f"{rhs_name}{version}"))
 					
-					# Create new version for definition
 					def_name = statement.name().name()
 					if def_name in counters:
 						i = counters[def_name]
 						counters[def_name] += 1
-						new_var = IRVariable(f"{def_name}{i}")
+						new_var = IRVariable(f"{def_name}{counters[def_name]}")
 						statement._name = new_var
 						stacks[def_name].append(i)
 						pushed.append(def_name)
 				
 				elif type(statement) == IRAssignment:
-					# Replace uses
 					if type(statement.value()) == IRVariable:
 						val_name = statement.value().name()
 						if val_name in stacks and stacks[val_name]:
 							version = stacks[val_name][-1]
 							statement.replaceValue(IRVariable(f"{val_name}{version}"))
 				
-					# Create new version for definition
 					def_name = statement.name().name()
 					if def_name in counters:
 						i = counters[def_name]
@@ -568,7 +557,7 @@ class Optimizer:
 						stacks[def_name].append(i)
 						pushed.append(def_name)
       
-			# Handle control transfers
+			#Handle control transfers
 			if block.control():
 				if type(block.control()) == IRConditional:
 					cond = block.control().condition()
@@ -597,8 +586,7 @@ class Optimizer:
 						break
 					
 					var_name = statement.name().name()
-					# Extract base name (remove version number)
-					base_name = var_name.rstrip('0123456789')
+					base_name = var_name.rstrip('0123456789') #Extract base name
 					
 					if base_name in stacks and stacks[base_name]:
 						version = stacks[base_name][-1]
@@ -606,13 +594,10 @@ class Optimizer:
 					else:
 						phi_arg = IRVariable(base_name)
 					
-					# Add to phi (block_name, variable)
 					statement.prior_blocks().append((block.name(), phi_arg))
 			
-			# Push cleanup onto stack (will execute after children)
 			work_stack.append((block_id, 'cleanup', pushed))
-			
-			# Push children in reverse order so they process in correct order
+			#Stack, so children get push after to run first(reverse order)
 			if block_id in dom_children:
 				for child_id in reversed(dom_children[block_id]):
 					work_stack.append((child_id, 'process', []))

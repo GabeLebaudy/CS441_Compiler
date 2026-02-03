@@ -7,8 +7,9 @@ from optimizer import Optimizer
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser()
 	parser.add_argument("-printCFG", dest="printCfg", action="store_true", help="print the AST Nodes after parsing")
-	parser.add_argument("-noSSA", dest="noSSA", action="store_true", help="Don't run SSA")
-	parser.add_argument("-noopt", dest="noOpt", action="store_true", help="Don't optimize output")
+	parser.add_argument("-ssa_type", dest="ssa_type", help="Options: max(maximally suboptimal SSA), opt(optimized ssa), or none")
+	parser.add_argument("-const_arithmetic", dest="const_arith", action="store_true", help="Flag for optimizing out constant arithmetic")
+	parser.add_argument("-vn", dest="vn", action="store_true", help="Flag for running value numbering for local blocks")
 	parser.add_argument("filename", help="input file to compile")
 	args = parser.parse_args()
 
@@ -18,6 +19,12 @@ if __name__ == "__main__":
 
 	if not os.path.exists(args.filename):
 		raise Exception(f"Error, file: {args.filename} does not exist")
+
+	if args.ssa_type != "max" and args.ssa_type != "opt" and args.ssa_type != "none":
+		raise Exception("Error: Must choose a valid ssa type (max, opt, none)")
+
+	if args.ssa_type == "none" and args.vn:
+		raise Exception("Cannot run value numbering without SSA type")
 
 	with open(args.filename, 'r') as f:
 		str_text = "".join(f.readlines())
@@ -31,8 +38,12 @@ if __name__ == "__main__":
 	cfg_generator = CFGGenerator(ast_nodes, args)
 	program = cfg_generator.convertAstToIr() #Pass in constant arithmetic optimizer flag (needs to be done in here)
 	optimizer = Optimizer(program)
-	# if not args.noSSA:
-	# 	optimizer.convertToSSA()
-	optimizer.getOptimizedSSA()
-	optimizer.applyValueNumbering()
+	if args.ssa_type == "max":
+		optimizer.convertToSSA()
+	elif args.ssa_type == "opt":
+		optimizer.getOptimizedSSA()
+	
+	if args.vn:
+		optimizer.applyValueNumbering()
+  
 	print(optimizer.getProgram())
