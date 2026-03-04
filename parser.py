@@ -32,24 +32,27 @@ class TokenType:
 	LOCALS = 27,
 	CLASS = 28,
 	MAIN = 29,
+	INT = 30,
+	NULL = 31,
+	RETURNING = 32,
 	#Tokens with data
-	OPERATOR = 30,
-	NUMBER = 31,
-	IDENTIFIER = 32
+	OPERATOR = 33,
+	NUMBER = 34,
+	IDENTIFIER = 35
 
 TOKEN_TYPE_TO_STDOUT = {
 	1: "(", 2: ")", 3: "{", 4: "}", 5: "^", 6: "&", 7: "@", 8: "!",
 	9: ".", 10: ":", 11: ",", 12: "_", 13: "=", 14: "[", 15: "]", 16: "this", 
  	17: "if", 18: "else", 19: "ifonly", 20: "while", 21: "return", 22: "print", 
 	23: "EOF", 24: "with", 25: "fields", 26: "method", 27: "locals", 28: "class",
- 	29: "main", 30: "Operator", 31: "Number", 32: "Identifier"
+ 	29: "main", 30: "int", 31: "null", 32: "returning", 33: "Operator", 34: "Number", 35: "Identifier"
 }
 
 def printToken(token):
 	if type(token) == tuple:
-		print("Token: ", TOKEN_TYPE_TO_STDOUT[token[0]])
+		return f"Token: {TOKEN_TYPE_TO_STDOUT[token[0]]}"
 	else:
-		print(token)
+		return str(token)
 
 class Operator:
 	def __init__(self, op: str):
@@ -110,7 +113,10 @@ class Tokenizer:
 					'method': TokenType.METHOD,
 					'locals': TokenType.LOCALS,
 					'class': TokenType.CLASS,
-					'main': TokenType.MAIN}
+					'main': TokenType.MAIN,
+     				'int': TokenType.INT,
+         			'null': TokenType.NULL,
+            		'returning': TokenType.RETURNING}
  
 	OP_LIST = ['+', '-', '*', '/', '<', '>']
 
@@ -171,24 +177,33 @@ class Tokenizer:
 
 		else:
 			raise Exception(f"Unsupported character: {self._text[self._current]}")
+
 class Parser:
 	def __init__(self, tokenizer: Tokenizer):
 		self._tokenizer = tokenizer
 	
-	def getCommaSepIdentifiers(self) -> list[Identifier]:
-		identifiers = []
-		if type(self._tokenizer.peek()) != Identifier:
-			return identifiers
-		
-		tok = self._tokenizer.next()
-		identifiers.append(tok)
-		while self._tokenizer.peek() == TokenType.COMMA:
-			_ = self._tokenizer.next()
-			tok = self._tokenizer.next()
-			if type(tok) != Identifier:
-				raise Exception("Expected identifier, got:", tok)
-			identifiers.append(tok)
-		return identifiers
+	def getCommaSepVariables(self) -> list[Variable]:
+		variables = []
+		while (type(self._tokenizer.peek()) == Identifier):
+			var_name = self._tokenizer.next()
+			colon = self._tokenizer.next()
+			if colon != TokenType.COLON:
+				raise Exception("Expected ':', but got:", printToken(colon))
+
+			var_type = self._tokenizer.next()
+			cur_variable = Variable(var_name.name())
+			if type(var_type) == Identifier:
+				cur_variable.setType(var_type.name())
+			elif var_type == TokenType.INT:
+				cur_variable.setType('int')
+			else:
+				raise Exception("Invalid variable type:", printToken(var_type))
+
+			variables.append(cur_variable)
+			if self._tokenizer.peek() == TokenType.COMMA:
+				self._tokenizer.next()
+    
+		return variables
 
 	def parseExpr(self) -> Expression:
 		tok = self._tokenizer.next()
@@ -201,34 +216,41 @@ class Parser:
 		elif tok == TokenType.LEFT_PAREN: #Arithmetic operation
 			lhs = self.parseExpr()
 			optok = self._tokenizer.next()
-			if type(optok) != Operator:
-				raise Exception("Expected operator token but found", optok)
+			if optok == TokenType.EQUALS:
+				nxt = self._tokenizer.next()
+				if nxt != TokenType.EQUALS:
+					raise Exception("Expected '=' but got:", printToken(nxt))
+				else:
+					optok = Operator("==")
+     
+			elif type(optok) != Operator:
+				raise Exception("Expected operator token but found", printToken(optok))
 			
 			rhs = self.parseExpr()
 			closetok = self._tokenizer.next() 
 			if closetok != TokenType.RIGHT_PAREN:
-				raise Exception("Expected ')' but got", closetok)
+				raise Exception("Expected ')' but got", printToken(closetok))
 			return BinaryOp(lhs, optok, rhs)
 		elif tok == TokenType.AMPERSAND: #Field Read
 			base = self.parseExpr()
 			dot = self._tokenizer.next()
 			if dot != TokenType.DOT:
-				raise Exception("Expected '.' but found", dot)
+				raise Exception("Expected '.' but found", printToken(dot))
 			fname = self._tokenizer.next()
 			if type(fname) != Identifier:
-				raise Exception("Expected valid field name but found", fname)
+				raise Exception("Expected valid field name but found", printToken(fname))
 			return FieldRead(base, fname.name())
 		elif tok == TokenType.CARET: #Method invocation
 			mbase = self.parseExpr()
 			mdot = self._tokenizer.next()
 			if mdot != TokenType.DOT:
-				raise Exception("Expected dot but found", mdot)
+				raise Exception("Expected dot but found", printToken(mdot))
 			mname = self._tokenizer.next()
 			if type(mname) != Identifier:
-				raise Exception("Expected valid method name but found", mname)
+				raise Exception("Expected valid method name but found", printToken(mname))
 			open = self._tokenizer.next()
 			if open != TokenType.LEFT_PAREN:
-				raise Exception("Expected '(' but found", open)
+				raise Exception("Expected '(' but found", printToken(open))
 			args = []
 			while(self._tokenizer.peek() != TokenType.RIGHT_PAREN):
 				e = self.parseExpr()
@@ -242,12 +264,20 @@ class Parser:
 		elif tok == TokenType.ATSIGN: #Class reference
 			cname = self._tokenizer.next()
 			if type(cname) != Identifier:
-				raise Exception("Expected identifier, got", cname)
+				raise Exception("Expected identifier, got", printToken(cname))
 			return ClassRef(cname.name())
 		elif tok == TokenType.THIS:
 			return ThisExpr()
+		elif tok == TokenType.NULL:
+			colon = self._tokenizer.next()
+			if colon != TokenType.COLON:
+				raise Exception("Expected ':', but got:", printToken(colon))
+			null_type = self._tokenizer.next()
+			if type(null_type) != Identifier:
+				raise Exception("Expected class type, got:", printToken(null_type))
+			return NullExpr(null_type.name())
 		else:
-			raise Exception(f"Token {tok} is not a valid start to an expression")
+			raise Exception("Token", printToken(tok), "is not a valid start to an expression")
 
 	def parseStatement(self) -> Statement:
 		tok = self._tokenizer.next()
@@ -257,40 +287,40 @@ class Parser:
 			var_name = Variable(tok.name())
 			eq = self._tokenizer.next()
 			if eq != TokenType.EQUALS:
-				raise Exception("Expected '=' but got:", eq)
+				raise Exception("Expected '=' but got:", printToken(eq))
 
 			exp = self.parseExpr()
 			return Assignment(var_name, exp)
 		elif tok == TokenType.UNDERSCORE: # Statement to run for side effects
 			eq = self._tokenizer.next()
 			if eq != TokenType.EQUALS:
-				raise Exception("Expected '=' but got:", eq)
+				raise Exception("Expected '=' but got:", printToken(eq))
 			return UnderscoreAssignment(self.parseExpr())
 		elif tok == TokenType.NOT: #Field update
 			fbase = self.parseExpr()
 			dot = self._tokenizer.next()
 			if dot != TokenType.DOT:
-				raise Exception("Expected '.', got:", dot)
+				raise Exception("Expected '.', got:", printToken(dot))
 			
 			fname = self._tokenizer.next()
 			if type(fname) != Identifier:
-				raise Exception("Expected identifier, got:", fname)
+				raise Exception("Expected identifier, got:", printToken(fname))
 			
 			fread = FieldRead(fbase, fname.name())
 			eq = self._tokenizer.next()
 			if eq != TokenType.EQUALS:
-				raise Exception("Expected '=' but got:", eq)
+				raise Exception("Expected '=' but got:", printToken(eq))
 			exp = self.parseExpr()
 			return FieldUpdate(fread, exp)
 		elif tok == TokenType.IF:
 			exp = self.parseExpr()
 			colon = self._tokenizer.next()
 			if(colon != TokenType.COLON):
-				raise Exception("Expected ':' but got:", colon)
+				raise Exception("Expected ':' but got:", printToken(colon))
 
 			left_brace = self._tokenizer.next()
 			if(left_brace != TokenType.LEFT_BRACE):
-				raise Exception("Expected '{' but got:", left_brace)
+				raise Exception("Expected '{' but got:", printToken(left_brace))
 
 			if_statements = []
 			while(self._tokenizer.peek() != TokenType.RIGHT_BRACE):
@@ -299,11 +329,11 @@ class Parser:
 			_ = self._tokenizer.next() #Move past right brace
 			else_tok = self._tokenizer.next()
 			if(else_tok != TokenType.ELSE):
-				raise Exception("Expected else, but got:", else_tok)
+				raise Exception("Expected else, but got:", printToken(else_tok))
 
 			left_brace = self._tokenizer.next()
 			if(left_brace != TokenType.LEFT_BRACE):
-				raise Exception("Expected '{' but got:", left_brace)
+				raise Exception("Expected '{' but got:", printToken(left_brace))
 
 			else_statements = []
 			while(self._tokenizer.peek() != TokenType.RIGHT_BRACE):
@@ -316,11 +346,11 @@ class Parser:
 			exp = self.parseExpr()
 			colon = self._tokenizer.next()
 			if(colon != TokenType.COLON):
-				raise Exception("Expected ':' but got:", colon)
+				raise Exception("Expected ':' but got:", printToken(colon))
 
 			left_brace = self._tokenizer.next()
 			if(left_brace != TokenType.LEFT_BRACE):
-				raise Exception("Expected '{' but got:", left_brace)
+				raise Exception("Expected '{' but got:", printToken(left_brace))
 
 			if_statements = []
 			while(self._tokenizer.peek() != TokenType.RIGHT_BRACE):
@@ -333,11 +363,11 @@ class Parser:
 			exp = self.parseExpr()
 			colon = self._tokenizer.next()
 			if colon != TokenType.COLON:
-				raise Exception("Expected ':', but got:", colon)
+				raise Exception("Expected ':', but got:", printToken(colon))
 
 			left_brace = self._tokenizer.next()
 			if left_brace != TokenType.LEFT_BRACE:
-				raise Exception("Expected '{', but got:", left_brace)
+				raise Exception("Expected '{', but got:", printToken(left_brace))
 
 			while_statements = []
 			while(self._tokenizer.peek() != TokenType.RIGHT_BRACE):
@@ -353,84 +383,77 @@ class Parser:
 		elif tok == TokenType.PRINT:
 			left_paren = self._tokenizer.next()
 			if left_paren != TokenType.LEFT_PAREN:
-				raise Exception("Expected '(' but got:", left_paren)
+				raise Exception("Expected '(' but got:", printToken(left_paren))
 
 			exp = self.parseExpr()
 			right_paren = self._tokenizer.next()
 			if right_paren != TokenType.RIGHT_PAREN:
-				raise Exception("Expected ')' but got:", right_paren)
+				raise Exception("Expected ')' but got:", printToken(right_paren))
 
 			return PrintStatement(exp)
 
 		else:
-			raise Exception("Unexpected token for start of statement:", tok)
+			raise Exception("Unexpected token for start of statement:", printToken(tok))
     
 	def parseClass(self) -> ClassDefinition:
 		tok = self._tokenizer.next()
 		if tok != TokenType.CLASS:
-			raise Exception("Expected class definition, got:", tok) # Should not trigger
+			raise Exception("Expected class definition, got:", printToken(tok)) # Should not trigger
 
 		cname = self._tokenizer.next()
 		if type(cname) != Identifier:
-			raise Exception("Expected identifier, got:", cname)
+			raise Exception("Expected identifier, got:", printToken(cname))
 		
 		left_bracket = self._tokenizer.next()
 		if left_bracket != TokenType.LEFT_BRACKET:
-			raise Exception("Expected '[' but got:", left_bracket)
+			raise Exception("Expected '[' but got:", printToken(left_bracket))
 
 		tok = self._tokenizer.next()
 		if tok != TokenType.FIELDS:
-			raise Exception("Expected fields, got:", tok)
+			raise Exception("Expected fields, got:", printToken(tok))
 
-		field_ids = self.getCommaSepIdentifiers()
-		fields = []
-		for i in field_ids:
-			fields.append(Variable(i.name()))
-
+		field_vars = self.getCommaSepVariables()
 		methods = []
 		tok = self._tokenizer.next()
 		while tok == TokenType.METHOD:
 			mname = self._tokenizer.next()
 			if type(mname) != Identifier:
-				raise Exception("Expected identifier, got:", mname)
+				raise Exception("Expected identifier, got:", printToken(mname))
 
 			left_paren = self._tokenizer.next()
 			if left_paren != TokenType.LEFT_PAREN:
-				raise Exception("Expected '(' got:", left_paren)
+				raise Exception("Expected '(' got:", printToken(left_paren))
 
 			statements = []
-			method_identifiers = self.getCommaSepIdentifiers()
-			margs = []
-			for i in method_identifiers:
-				margs.append(Variable(i.name()))
-			
+			method_params = self.getCommaSepVariables()
 			tok = self._tokenizer.next()
 			if tok != TokenType.RIGHT_PAREN:
-				raise Exception("Expected ')' but got:", tok)
+				raise Exception("Expected ')' but got:", printToken(tok))
 			
+			returning_tok = self._tokenizer.next()
+			if returning_tok != TokenType.RETURNING:
+				raise Exception("Expected 'returning' keyword, but got:", printToken(returning_tok))
+
+			return_type = self._tokenizer.next()
+			if type(return_type) == Identifier:
+				return_type = return_type.name()
+			elif return_type == TokenType.INT:
+				return_type = "int"
+			else:
+				raise Exception("Invalid return type:", printToken(return_type))
+
 			tok = self._tokenizer.next()
 			if tok != TokenType.WITH:
-				raise Exception("Expected with, got:", tok)
+				raise Exception("Expected with, got:", printToken(tok))
 			
 			tok = self._tokenizer.next()
 			if tok != TokenType.LOCALS:
-				raise Exception("Expected locals, got:", tok)
+				raise Exception("Expected locals, got:", printToken(tok))
 
-			local_identifiers = self.getCommaSepIdentifiers()
-			mlocals = []
-			for i in local_identifiers:
-				mlocals.append(Variable(i.name()))
-    
-			while(self._tokenizer.peek() == TokenType.COMMA):
-				_ = self._tokenizer.next()
-				local_tok = self._tokenizer.next()
-				if type(local_tok) != Identifier:
-					raise Exception("Expected identifier, got:", local_tok)
-				mlocals.append(Variable(local_tok.name()))
-
+			method_variables = self.getCommaSepVariables()
 			colon = self._tokenizer.next()
 			if colon != TokenType.COLON:
-				raise Exception("Expected colon, got:", colon)
+				raise Exception("Expected colon, got:", printToken(colon))
 
 			while self._tokenizer.peek() != TokenType.METHOD and self._tokenizer.peek() != TokenType.RIGHT_BRACKET:
 				statements.append(self.parseStatement())
@@ -438,37 +461,33 @@ class Parser:
 			if not statements:
 				raise Exception("Expected method body")
 
-			methods.append(MethodDefinintion(mname.name(), margs, mlocals, statements))
+			methods.append(MethodDefinintion(mname.name(), method_params, return_type, method_variables, statements))
 			tok = self._tokenizer.next()
    
 		if tok != TokenType.RIGHT_BRACKET:
-			raise Exception("Expected ']', but got:", tok)
+			raise Exception("Expected ']', but got:", printToken(tok))
 
-		return ClassDefinition(cname.name(), fields, methods)			
+		return ClassDefinition(cname.name(), field_vars, methods)			
 	
 	def parseMain(self) -> MainMethod:
 		main_tok = self._tokenizer.next()
 		if main_tok != TokenType.MAIN:
-			raise Exception("Expected main method, got:", main_tok)
+			raise Exception("Expected main method, got:", printToken(main_tok))
 		
 		with_tok = self._tokenizer.next()
 		if with_tok != TokenType.WITH:
-			raise Exception ("Expected with, got:", with_tok)
+			raise Exception ("Expected with, got:", printToken(with_tok))
 		
-		local_identifiers = self.getCommaSepIdentifiers()
-		locals = []
-		for i in local_identifiers:
-			locals.append(Variable(i.name()))
-		
+		main_variables = self.getCommaSepVariables()
 		colon = self._tokenizer.next()
 		if colon != TokenType.COLON:
-			raise Exception("Expected ':', but got:", colon)
+			raise Exception("Expected ':', but got:", printToken(colon))
 		
 		statements = []
 		while self._tokenizer.peek() != TokenType.EOF:
 			statements.append(self.parseStatement())
 
-		return MainMethod(locals, statements)
+		return MainMethod(main_variables, statements)
 	
 	def parseFile(self) -> list[ASTNode]:
 		nodes = []
@@ -481,5 +500,5 @@ class Parser:
 				main_def = self.parseMain()
 				nodes.append(ASTNode(None, main_def))
 			else:
-				raise Exception("Unknown starting token:", open_token)
+				raise Exception("Unknown starting token:", printToken(open_token))
 		return nodes

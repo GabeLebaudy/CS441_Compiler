@@ -556,6 +556,19 @@ class Optimizer:
 						statement.replaceName(new_var)
 						stacks[def_name].append(i)
 						pushed.append(def_name)
+
+				elif type(statement) == IRStore:
+					if type(statement.base()) == IRVariable:
+						base_name = statement.base().name()
+						if base_name in stacks and stacks[base_name]:
+							version = stacks[base_name][-1]
+							statement.replaceBase(IRVariable(f"{base_name}{version}"))
+					
+					if type(statement.val()) == IRVariable:
+						val_name = statement.val().name()
+						if val_name in stacks and stacks[val_name]:
+							version = stacks[val_name][-1]
+							statement.replaceVal(IRVariable(f"{val_name}{version}"))
       
 			#Handle control transfers
 			if block.control():

@@ -1,0 +1,44 @@
+class adder [
+	fields x, y
+	method add() with locals:
+		return (&this.x + &this.y)
+]
+
+class mult [
+	fields a, x
+	method mA() with locals:
+		return (&this.a * &this.x)
+
+	method mB(val) with locals:
+		return (&this.a * val)
+	
+]
+
+class calc [
+	fields addition, a, multiplier
+
+	method getAdder() with locals:
+		return &this.addition
+
+	method getMult() with locals:
+		return &this.multiplier
+
+	method add() with locals:
+		return (^&this.addition.add() + &this.a)
+
+	method mult(a) with locals b:
+		b = (a * ^&this.multiplier.mA())
+		return b
+]
+
+main with a, c, m, x, y:
+	c = @calc
+	a = @adder
+	m = @mult
+	x = 3
+	y = 5
+	!a.x = 1
+	!a.y = 2
+	!c.a = 10
+	!c.addition = a
+	print(^c.add())

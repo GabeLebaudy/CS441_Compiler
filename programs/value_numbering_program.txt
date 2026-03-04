@@ -1,9 +1,10 @@
 class Foo [
     fields
-    method doStuff(x,y,z) with locals r, q:
+    method doStuff(x: int, y: int, z: int) returning int with locals r: int, q: int:
         r = (x + x)
 		q = ((x + x) + x)
 		print(r)
 		return q
 ]
+
 main with:

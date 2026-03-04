@@ -1,0 +1,504 @@
+Milestone 2:
+gabe@DESKTOP-KPNI5SV:/mnt/c/Users/Gabe/Downloads/milestone_2$ ./comp -ssa_type max -vn complex_program_untyped.txt
+data:
+global array vtbladder: { addadder }
+global array fieldsadder: { 2, 3 }
+global array vtblmult: { mAmult, mBmult }
+global array fieldsmult: { 2, 3 }
+global array vtblcalc: { getAddercalc, getMultcalc, addcalc, multcalc }
+global array fieldscalc: { 2, 3, 4 }
+code:
+
+addadder(this):
+  %1 = %this & 1
+  if %1 then not_a_pointer2 else ok_ptr1
+
+not_a_pointer2:
+  fail NotAPointer
+
+ok_ptr1:
+  %2 = %this + 8
+  %3 = load(%2)
+  %4 = getelt(%3, 0)
+  if %4 then field_exists3 else bad_field4
+
+bad_field4:
+  fail NoSuchField
+
+field_exists3:
+  %5 = getelt(%this, %4)
+  %6 = %this & 1
+  if %6 then not_a_pointer6 else ok_ptr5
+
+not_a_pointer6:
+  fail NotAPointer
+
+ok_ptr5:
+  %7 = %this + 8
+  %8 = load(%7)
+  %9 = getelt(%8, 1)
+  if %9 then field_exists7 else bad_field8
+
+bad_field8:
+  fail NoSuchField
+
+field_exists7:
+  %10 = getelt(%this, %9)
+  %11 = %5 & 1
+  if %11 then ok_left9 else not_a_number10
+
+not_a_number10:
+  fail NotANumber
+
+ok_left9:
+  %12 = %10 & 1
+  if %12 then ok_right12 else not_a_number11
+
+not_a_number11:
+  fail NotANumber
+
+ok_right12:
+  %14 = %5 >> 1
+  %15 = %10 >> 1
+  %16 = %14 + %15
+  %17 = %16 << 1
+  %13 = %17 | 1
+  ret %13
+
+mAmult(this):
+  %1 = %this & 1
+  if %1 then not_a_pointer14 else ok_ptr13
+
+not_a_pointer14:
+  fail NotAPointer
+
+ok_ptr13:
+  %2 = %this + 8
+  %3 = load(%2)
+  %4 = getelt(%3, 0)
+  if %4 then field_exists15 else bad_field16
+
+bad_field16:
+  fail NoSuchField
+
+field_exists15:
+  %5 = getelt(%this, %4)
+  %6 = %this & 1
+  if %6 then not_a_pointer18 else ok_ptr17
+
+not_a_pointer18:
+  fail NotAPointer
+
+ok_ptr17:
+  %7 = %this + 8
+  %8 = load(%7)
+  %9 = getelt(%8, 1)
+  if %9 then field_exists19 else bad_field20
+
+bad_field20:
+  fail NoSuchField
+
+field_exists19:
+  %10 = getelt(%this, %9)
+  %11 = %5 & 1
+  if %11 then ok_left21 else not_a_number22
+
+not_a_number22:
+  fail NotANumber
+
+ok_left21:
+  %12 = %10 & 1
+  if %12 then ok_right24 else not_a_number23
+
+not_a_number23:
+  fail NotANumber
+
+ok_right24:
+  %14 = %5 >> 1
+  %15 = %10 >> 1
+  %16 = %14 * %15
+  %17 = %16 << 1
+  %13 = %17 | 1
+  ret %13
+
+mBmult(this, val):
+  %1 = %this & 1
+  if %1 then not_a_pointer26 else ok_ptr25
+
+not_a_pointer26:
+  fail NotAPointer
+
+ok_ptr25:
+  %2 = %this + 8
+  %3 = load(%2)
+  %4 = getelt(%3, 0)
+  if %4 then field_exists27 else bad_field28
+
+bad_field28:
+  fail NoSuchField
+
+field_exists27:
+  %5 = getelt(%this, %4)
+  %6 = %5 & 1
+  if %6 then ok_left29 else not_a_number30
+
+not_a_number30:
+  fail NotANumber
+
+ok_left29:
+  %7 = %val & 1
+  if %7 then ok_right32 else not_a_number31
+
+not_a_number31:
+  fail NotANumber
+
+ok_right32:
+  %9 = %5 >> 1
+  %10 = %val >> 1
+  %11 = %9 * %10
+  %12 = %11 << 1
+  %8 = %12 | 1
+  ret %8
+
+getAddercalc(this):
+  %1 = %this & 1
+  if %1 then not_a_pointer34 else ok_ptr33
+
+not_a_pointer34:
+  fail NotAPointer
+
+ok_ptr33:
+  %2 = %this + 8
+  %3 = load(%2)
+  %4 = getelt(%3, 0)
+  if %4 then field_exists35 else bad_field36
+
+bad_field36:
+  fail NoSuchField
+
+field_exists35:
+  %5 = getelt(%this, %4)
+  ret %5
+
+getMultcalc(this):
+  %1 = %this & 1
+  if %1 then not_a_pointer38 else ok_ptr37
+
+not_a_pointer38:
+  fail NotAPointer
+
+ok_ptr37:
+  %2 = %this + 8
+  %3 = load(%2)
+  %4 = getelt(%3, 2)
+  if %4 then field_exists39 else bad_field40
+
+bad_field40:
+  fail NoSuchField
+
+field_exists39:
+  %5 = getelt(%this, %4)
+  ret %5
+
+addcalc(this):
+  %1 = %this & 1
+  if %1 then not_a_pointer42 else ok_ptr41
+
+not_a_pointer42:
+  fail NotAPointer
+
+ok_ptr41:
+  %2 = %this + 8
+  %3 = load(%2)
+  %4 = getelt(%3, 0)
+  if %4 then field_exists43 else bad_field44
+
+bad_field44:
+  fail NoSuchField
+
+field_exists43:
+  %5 = getelt(%this, %4)
+  %6 = %5 & 1
+  if %6 then not_a_pointer46 else ok_pointer_call45
+
+not_a_pointer46:
+  fail NotAPointer
+
+ok_pointer_call45:
+  %7 = load(%5)
+  %8 = getelt(%7, 0)
+  %9 = call(%8, %5, )
+  %10 = %this & 1
+  if %10 then not_a_pointer48 else ok_ptr47
+
+not_a_pointer48:
+  fail NotAPointer
+
+ok_ptr47:
+  %11 = %this + 8
+  %12 = load(%11)
+  %13 = getelt(%12, 1)
+  if %13 then field_exists49 else bad_field50
+
+bad_field50:
+  fail NoSuchField
+
+field_exists49:
+  %14 = getelt(%this, %13)
+  %15 = %9 & 1
+  if %15 then ok_left51 else not_a_number52
+
+not_a_number52:
+  fail NotANumber
+
+ok_left51:
+  %16 = %14 & 1
+  if %16 then ok_right54 else not_a_number53
+
+not_a_number53:
+  fail NotANumber
+
+ok_right54:
+  %18 = %9 >> 1
+  %19 = %14 >> 1
+  %20 = %18 + %19
+  %21 = %20 << 1
+  %17 = %21 | 1
+  ret %17
+
+multcalc(this, a):
+  %1 = %this & 1
+  if %1 then not_a_pointer56 else ok_ptr55
+
+not_a_pointer56:
+  fail NotAPointer
+
+ok_ptr55:
+  %2 = %this + 8
+  %3 = load(%2)
+  %4 = getelt(%3, 2)
+  if %4 then field_exists57 else bad_field58
+
+bad_field58:
+  fail NoSuchField
+
+field_exists57:
+  %5 = getelt(%this, %4)
+  %6 = %5 & 1
+  if %6 then not_a_pointer60 else ok_pointer_call59
+
+not_a_pointer60:
+  fail NotAPointer
+
+ok_pointer_call59:
+  %7 = load(%5)
+  %8 = getelt(%7, 0)
+  %9 = call(%8, %5, )
+  %10 = %a & 1
+  if %10 then ok_left61 else not_a_number62
+
+not_a_number62:
+  fail NotANumber
+
+ok_left61:
+  %11 = %9 & 1
+  if %11 then ok_right64 else not_a_number63
+
+not_a_number63:
+  fail NotANumber
+
+ok_right64:
+  %13 = %a >> 1
+  %14 = %9 >> 1
+  %15 = %13 * %14
+  %16 = %15 << 1
+  %12 = %16 | 1
+  %b0 = %12
+  ret %b0
+
+main:
+  %17 = alloc(5)
+  store(%17, @vtblcalc)
+  %18 = %17 + 8
+  store(%18, @fieldscalc)
+  %c0 = %17
+  %19 = alloc(4)
+  store(%19, @vtbladder)
+  %20 = %19 + 8
+  store(%20, @fieldsadder)
+  %a0 = %19
+  %21 = alloc(4)
+  store(%21, @vtblmult)
+  %22 = %21 + 8
+  store(%22, @fieldsmult)
+  %m0 = %21
+  %x0 = 7
+  %y0 = 11
+  %23 = %a0 & 1
+  if %23 then not_a_pointer66 else ok_pointer65
+
+not_a_pointer66:
+  fail NotAPointer
+
+ok_pointer65:
+  %24 = %a0 + 8
+  %25 = load(%24)
+  %26 = getelt(%25, 0)
+  if %26 then store_works67 else bad_field68
+
+bad_field68:
+  fail NoSuchField
+
+store_works67:
+  setelt(%a0, %26, 3)
+  %27 = %a0 & 1
+  if %27 then not_a_pointer70 else ok_pointer69
+
+not_a_pointer70:
+  fail NotAPointer
+
+ok_pointer69:
+  %28 = %a0 + 8
+  %29 = load(%28)
+  %30 = getelt(%29, 1)
+  if %30 then store_works71 else bad_field72
+
+bad_field72:
+  fail NoSuchField
+
+store_works71:
+  setelt(%a0, %30, 5)
+  %31 = %c0 & 1
+  if %31 then not_a_pointer74 else ok_pointer73
+
+not_a_pointer74:
+  fail NotAPointer
+
+ok_pointer73:
+  %32 = %c0 + 8
+  %33 = load(%32)
+  %34 = getelt(%33, 1)
+  if %34 then store_works75 else bad_field76
+
+bad_field76:
+  fail NoSuchField
+
+store_works75:
+  setelt(%c0, %34, 21)
+  %35 = %c0 & 1
+  if %35 then not_a_pointer78 else ok_pointer77
+
+not_a_pointer78:
+  fail NotAPointer
+
+ok_pointer77:
+  %36 = %c0 + 8
+  %37 = load(%36)
+  %38 = getelt(%37, 0)
+  if %38 then store_works79 else bad_field80
+
+bad_field80:
+  fail NoSuchField
+
+store_works79:
+  setelt(%c0, %38, %a0)
+  %39 = %c0 & 1
+  if %39 then not_a_pointer82 else ok_pointer_call81
+
+not_a_pointer82:
+  fail NotAPointer
+
+ok_pointer_call81:
+  %40 = load(%c0)
+  %41 = getelt(%40, 2)
+  %42 = call(%41, %c0, )
+  %43 = %42 >> 1
+  print(%43)
+  ret 0
+
+Milestone 3:
+gabe@DESKTOP-KPNI5SV:/mnt/c/Users/Gabe/My Documents/GitHub/CS441_Compiler$ ./comp -ssa_type opt -vn programs/complex_program.txt
+data:
+global array vtbladder: { addadder }
+global array vtblmult: { mAmult, mBmult }
+global array vtblcalc: { getAddercalc, getMultcalc, addcalc, multcalc }
+code:
+
+addadder(this):
+  %1 = %this + 8
+  %2 = load(%1)
+  %3 = %this + 16
+  %4 = load(%3)
+  %5 = %2 + %4
+  ret %5
+
+mAmult(this):
+  %1 = %this + 8
+  %2 = load(%1)
+  %3 = %this + 16
+  %4 = load(%3)
+  %5 = %2 * %4
+  ret %5
+
+mBmult(this, val):
+  %1 = %this + 8
+  %2 = load(%1)
+  %3 = %2 * %val
+  ret %3
+
+getAddercalc(this):
+  %1 = %this + 8
+  %2 = load(%1)
+  ret %2
+
+getMultcalc(this):
+  %1 = %this + 24
+  %2 = load(%1)
+  ret %2
+
+addcalc(this):
+  %1 = %this + 8
+  %2 = load(%1)
+  %3 = load(%2)
+  %4 = getelt(%3, 0)
+  %5 = call(%4, %2, )
+  %6 = %this + 16
+  %7 = load(%6)
+  %8 = %5 + %7
+  ret %8
+
+multcalc(this, a):
+  %1 = %this + 24
+  %2 = load(%1)
+  %3 = load(%2)
+  %4 = getelt(%3, 0)
+  %5 = call(%4, %2, )
+  %6 = %a * %5
+  %b0 = %6
+  ret %b0
+
+main:
+  %7 = alloc(5)
+  store(%7, @vtblcalc)
+  %c0 = %7
+  %8 = alloc(4)
+  store(%8, @vtbladder)
+  %a0 = %8
+  %9 = alloc(4)
+  store(%9, @vtblmult)
+  %m0 = %9
+  %x0 = 3
+  %y0 = 5
+  %10 = %a0 + 8
+  store(%10, 1)
+  %11 = %a0 + 16
+  store(%11, 2)
+  %12 = %c0 + 16
+  store(%12, 10)
+  %13 = %c0 + 8
+  store(%13, %a0)
+  %14 = load(%c0)
+  %15 = getelt(%14, 2)
+  %16 = call(%15, %c0, )
+  print(%16)
+  ret 0

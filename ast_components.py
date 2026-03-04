@@ -21,13 +21,20 @@ class Variable(Expression):
 	def __init__(self, name: str):
 		super().__init__()
 		self._name = name
+		self._type = None
 
 	def name(self) -> str:
 		return self._name
 	
+	def type(self) -> str:
+		return self._type
+
+	def setType(self, val: str):
+		self._type = val
+  
 	def __str__(self) -> str:
 		super().__init__()
-		return f"[Variable: name={self._name}]"
+		return f"[Variable: name={self._name}, type={self._type}]"
 
 class BinaryOp(Expression):
 	def __init__(self, lhs, op, rhs):
@@ -70,7 +77,7 @@ class MethodCall(Expression):
 		self._methodname = methodname
 		self._args = args
 
-	def base(self) -> str:
+	def base(self) -> Expression:
 		return self._base
 	
 	def name(self) -> str:
@@ -110,6 +117,19 @@ class ThisExpr(Expression):
 	def __str__(self) -> str:
 		return "This Expression"
 
+class NullExpr(Expression):
+    def __init__(self, null_type: str):
+        self._type = null_type
+    
+    def name(self) -> str:
+        return "null"
+    
+    def type(self) -> str:
+        return self._type
+    
+    def __str__(self) -> str:
+        return f"Null Expr: [Type={self._type}]"
+    
 class Assignment(Statement):
 	def __init__(self, variable: Variable, expression: Expression):
 		super().__init__()
@@ -236,9 +256,10 @@ class PrintStatement(Statement):
 		return f"Print statement: [prints {self._exp}]"
     
 class MethodDefinintion:
-	def __init__(self, name: str, params: list[Variable], locals: list[Variable], statements: list[Statement]):
+	def __init__(self, name: str, params: list[Variable], return_type: str, locals: list[Variable], statements: list[Statement]):
 		self._name = name
 		self._params = params
+		self._return_type = return_type
 		self._locals = locals
 		self._statements = statements
     
@@ -248,6 +269,9 @@ class MethodDefinintion:
 	def params(self) -> list[Variable]:
 		return self._params
 	
+	def returnType(self) -> str:
+		return self._return_type
+
 	def locals(self) -> list[Variable]:
 		return self._locals
 	
